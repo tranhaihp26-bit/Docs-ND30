@@ -5,6 +5,7 @@ import multer from "multer";
 import mammoth from "mammoth";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import { enforceND30Standards } from "./src/server/middleware/compliance.middleware.ts";
 
 dotenv.config();
 
@@ -203,15 +204,22 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
         parsed = JSON.parse(textRes);
       }
 
-      return res.json({ success: true, formatted: parsed });
+      // DETERMINISTIC SAFETY NET: Cưỡng chế thể thức NĐ 30 & Zod Schema Validation
+      const regime = standardType === "party" ? "party" : "administrative";
+      const compliantDoc = enforceND30Standards(parsed, regime);
+
+      return res.json({ success: true, formatted: compliantDoc });
     } catch (error: any) {
-      console.warn("AI format failed or rate limited, using rule-based fallback:", error.message);
-      // Fallback parser so user is NEVER blocked!
-      const fallback = fallbackRuleBasedParser(rawText, standardType);
+      console.warn("AI format or Zod validation failed, using rule-based fallback:", error.message);
+      // Fallback parser + Compliance Middleware enforcement so user is NEVER blocked
+      const regime = standardType === "party" ? "party" : "administrative";
+      const rawFallback = fallbackRuleBasedParser(rawText, standardType);
+      const compliantFallback = enforceND30Standards(rawFallback, regime);
+
       return res.json({ 
         success: true, 
-        formatted: fallback, 
-        notice: "Đã chuẩn hóa nội dung theo quy tắc chuẩn thể thức NĐ 30/2020/NĐ-CP (Bộ phân tích dự phòng)." 
+        formatted: compliantFallback, 
+        notice: "Đã chuẩn hóa nội dung theo quy tắc chuẩn thể thức NĐ 30/2020/NĐ-CP (Rule Engine Fallback)." 
       });
     }
   });

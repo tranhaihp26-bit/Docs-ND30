@@ -5,12 +5,11 @@ import {
   Save, Wand2, RefreshCw, Maximize2, Minimize2, Check,
   ArrowRight, FileCheck, Layers
 } from "lucide-react";
-import { 
-  Document, Packer, Paragraph, TextRun, AlignmentType, 
-  Table, TableRow, TableCell, WidthType, BorderStyle 
-} from "docx";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import ND30Editor from "./components/ND30Editor.tsx";
+import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
+import { DocumentFormatType } from "./shared/schemas/document.schema.ts";
 
 interface DocumentState {
   orgHeader1: string;
@@ -114,96 +113,7 @@ const TEMPLATES = [
   }
 ];
 
-// Helper to convert HTML body string to rich DOCX paragraphs
-function parseHtmlToDocxParagraphs(html: string): Paragraph[] {
-  const paragraphs: Paragraph[] = [];
-  const cleanHtml = html.replace(/\r?\n/g, " ");
-  // Match paragraphs, headings, list items
-  const blockRegex = /<(p|h[1-6]|li)([^>]*)>(.*?)<\/\1>/gi;
-  let match;
 
-  while ((match = blockRegex.exec(cleanHtml)) !== null) {
-    const tag = match[1].toLowerCase();
-    const attrs = match[2];
-    const content = match[3];
-
-    const isCentered = attrs.includes("text-align: center") || /^(QUYẾT ĐỊNH|NGHỊ QUYẾT|BÁO CÁO)/i.test(content.replace(/<[^>]*>/g, "").trim());
-    const isHeading = tag.startsWith("h");
-
-    // Extract inline bold, italics, text
-    const runs: TextRun[] = [];
-    const inlineRegex = /(<strong>|<b>|<em>|<i>)(.*?)(<\/strong>|<\/b>|<\/em>|<\/i>)|([^<]+)/gi;
-    let inlineMatch;
-
-    while ((inlineMatch = inlineRegex.exec(content)) !== null) {
-      if (inlineMatch[4]) {
-        // Plain text
-        const text = inlineMatch[4].trim();
-        if (text) {
-          runs.push(new TextRun({
-            text: inlineMatch[4],
-            font: "Times New Roman",
-            size: 26 // 13pt
-          }));
-        }
-      } else {
-        const openTag = inlineMatch[1].toLowerCase();
-        const innerText = inlineMatch[2];
-        const isBold = openTag.includes("strong") || openTag.includes("b");
-        const isItalic = openTag.includes("em") || openTag.includes("i");
-
-        runs.push(new TextRun({
-          text: innerText,
-          bold: isBold,
-          italics: isItalic,
-          font: "Times New Roman",
-          size: 26 // 13pt
-        }));
-      }
-    }
-
-    if (runs.length === 0) {
-      const rawText = content.replace(/<[^>]*>/g, "").trim();
-      if (rawText) {
-        runs.push(new TextRun({
-          text: rawText,
-          font: "Times New Roman",
-          size: 26
-        }));
-      }
-    }
-
-    if (runs.length > 0) {
-      paragraphs.push(new Paragraph({
-        alignment: isCentered ? AlignmentType.CENTER : AlignmentType.JUSTIFIED,
-        indent: isCentered || isHeading ? undefined : { firstLine: 720 }, // 1.27cm indent as required by Decree 30
-        spacing: {
-          line: 276, // 1.15 line spacing
-          before: 80,
-          after: 80
-        },
-        children: runs
-      }));
-    }
-  }
-
-  // Fallback if no block tags matched
-  if (paragraphs.length === 0) {
-    const rawLines = html.replace(/<[^>]*>/g, "\n").split("\n").map(l => l.trim()).filter(Boolean);
-    rawLines.forEach(line => {
-      paragraphs.push(new Paragraph({
-        alignment: AlignmentType.JUSTIFIED,
-        indent: { firstLine: 720 },
-        spacing: { line: 276, before: 60, after: 60 },
-        children: [
-          new TextRun({ text: line, font: "Times New Roman", size: 26 })
-        ]
-      }));
-    });
-  }
-
-  return paragraphs;
-}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"upload" | "editor" | "preview" | "history">("upload");
@@ -217,6 +127,7 @@ export default function App() {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingDocx, setIsExportingDocx] = useState(false);
   const [isFullScreenPreview, setIsFullScreenPreview] = useState(false);
+  const [editorMode, setEditorMode] = useState<"rich" | "raw">("rich");
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -385,216 +296,30 @@ export default function App() {
     setSuccessMsg(`Đã áp dụng mẫu "${t.name}". Chuyển sang tab Xem trước hoặc Soạn thảo.`);
   };
 
-  // Export to standard Microsoft Word (.docx) adhering to Decree 30 table headers & signature layout
+  // Export to standard Microsoft Word (.docx) adhering to Decree 30 / Phụ lục I
   const exportToDocx = async () => {
     setIsExportingDocx(true);
     setErrorMsg("");
     try {
-      const bodyParagraphs = parseHtmlToDocxParagraphs(doc.bodyHtml);
+      const documentData: DocumentFormatType = {
+        regime: standardType === "party" ? "party" : "administrative",
+        nationalHeader1: doc.nationalHeader1 as any,
+        nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+        fontFamily: "Times New Roman",
+        fontSize: 13,
+        orgHeader1: doc.orgHeader1,
+        orgHeader2: doc.orgHeader2,
+        locationAndDate: doc.locationAndDate,
+        documentType: doc.documentType,
+        referenceNumber: doc.referenceNumber,
+        subject: doc.subject,
+        bodyHtml: doc.bodyHtml,
+        signTitle: doc.signTitle,
+        signName: doc.signName,
+        recipients: doc.recipients,
+      };
 
-      const docxFile = new Document({
-        styles: {
-          default: {
-            document: {
-              run: {
-                font: "Times New Roman",
-                size: 26, // 13pt
-                color: "000000"
-              }
-            }
-          }
-        },
-        sections: [
-          {
-            properties: {
-              page: {
-                margin: {
-                  top: 1134, // 20mm (Nghị định 30: 20-25mm)
-                  bottom: 1134, // 20mm (Nghị định 30: 20-25mm)
-                  left: 1701, // 30mm (Nghị định 30: 30-35mm)
-                  right: 850 // 15mm (Nghị định 30: 15-20mm)
-                }
-              }
-            },
-            children: [
-              // 1. Header 2-column borderless table
-              new Table({
-                width: { size: 100, type: WidthType.PERCENTAGE },
-                borders: {
-                  top: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  left: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  right: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                },
-                rows: [
-                  new TableRow({
-                    children: [
-                      // Left Header: Issuing Agency & Number
-                      new TableCell({
-                        width: { size: 45, type: WidthType.PERCENTAGE },
-                        children: [
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: doc.orgHeader1.toUpperCase(), size: 24, font: "Times New Roman" })
-                            ]
-                          }),
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: doc.orgHeader2.toUpperCase(), bold: true, size: 24, font: "Times New Roman" })
-                            ]
-                          }),
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: "----------------", size: 20, font: "Times New Roman" })
-                            ]
-                          }),
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: doc.referenceNumber, size: 24, font: "Times New Roman" })
-                            ]
-                          })
-                        ]
-                      }),
-                      // Right Header: National Motto & Location/Date
-                      new TableCell({
-                        width: { size: 55, type: WidthType.PERCENTAGE },
-                        children: [
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: doc.nationalHeader1.toUpperCase(), bold: true, size: 24, font: "Times New Roman" })
-                            ]
-                          }),
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: doc.nationalHeader2, bold: true, size: 26, font: "Times New Roman" })
-                            ]
-                          }),
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: "----------------------", size: 20, font: "Times New Roman" })
-                            ]
-                          }),
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: doc.locationAndDate, italics: true, size: 26, font: "Times New Roman" })
-                            ]
-                          })
-                        ]
-                      })
-                    ]
-                  })
-                ]
-              }),
-
-              // Spacer
-              new Paragraph({ text: "" }),
-
-              // 2. Document Type
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 120, after: 60 },
-                children: [
-                  new TextRun({ text: doc.documentType.toUpperCase(), bold: true, size: 28, font: "Times New Roman" })
-                ]
-              }),
-
-              // 3. Subject
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 60, after: 180 },
-                children: [
-                  new TextRun({ text: doc.subject, bold: true, italics: true, size: 26, font: "Times New Roman" })
-                ]
-              }),
-
-              // 4. Main Body Content (Structured Paragraphs)
-              ...bodyParagraphs,
-
-              // Spacer
-              new Paragraph({ text: "" }),
-
-              // 5. Signature & Recipients 2-column borderless table
-              new Table({
-                width: { size: 100, type: WidthType.PERCENTAGE },
-                borders: {
-                  top: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  left: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  right: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                  insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
-                },
-                rows: [
-                  new TableRow({
-                    children: [
-                      // Left: Recipients
-                      new TableCell({
-                        width: { size: 50, type: WidthType.PERCENTAGE },
-                        children: [
-                          new Paragraph({
-                            children: [
-                              new TextRun({ text: "Nơi nhận:", bold: true, italics: true, size: 22, font: "Times New Roman" })
-                            ]
-                          }),
-                          ...doc.recipients.split("\n").map(line => new Paragraph({
-                            spacing: { line: 240 },
-                            children: [
-                              new TextRun({ text: line.startsWith("-") ? line : `- ${line}`, size: 20, font: "Times New Roman" })
-                            ]
-                          }))
-                        ]
-                      }),
-                      // Right: Signer Title & Name
-                      new TableCell({
-                        width: { size: 50, type: WidthType.PERCENTAGE },
-                        children: [
-                          ...doc.signTitle.split("\n").map(line => new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: line.toUpperCase(), bold: true, size: 24, font: "Times New Roman" })
-                            ]
-                          })),
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: "(Ký, đóng dấu)", italics: true, size: 20, font: "Times New Roman" })
-                            ]
-                          }),
-                          new Paragraph({ text: "\n\n" }),
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            children: [
-                              new TextRun({ text: doc.signName, bold: true, size: 26, font: "Times New Roman" })
-                            ]
-                          })
-                        ]
-                      })
-                    ]
-                  })
-                ]
-              })
-            ]
-          }
-        ]
-      });
-
-      const blob = await Packer.toBlob(docxFile);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${doc.documentType.replace(/\s+/g, "_")}_ChuanND30.docx`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await generateAndDownloadDocx(documentData);
       setSuccessMsg("Xuất file Microsoft Word (.docx) chuẩn Nghị định 30 thành công!");
     } catch (err: any) {
       setErrorMsg("Lỗi khi tạo file Word: " + err.message);
@@ -983,15 +708,48 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Nội dung chi tiết (Định dạng HTML chuẩn văn thư: Điều, Khoản, Điểm):
-                </label>
-                <textarea
-                  rows={9}
-                  value={doc.bodyHtml}
-                  onChange={(e) => handleFieldChange("bodyHtml", e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-xs text-slate-800 font-mono leading-relaxed"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-700">
+                    Nội dung chi tiết (Trình soạn thảo chuẩn Nghị định 30):
+                  </label>
+                  <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setEditorMode("rich")}
+                      className={`px-2.5 py-0.5 rounded font-medium transition ${
+                        editorMode === "rich" ? "bg-white text-blue-600 shadow-2xs font-semibold" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Trực quan (Tiptap NĐ 30)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorMode("raw")}
+                      className={`px-2.5 py-0.5 rounded font-medium transition ${
+                        editorMode === "raw" ? "bg-white text-blue-600 shadow-2xs font-semibold" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Mã HTML
+                    </button>
+                  </div>
+                </div>
+
+                {editorMode === "rich" ? (
+                  <ND30Editor
+                    key={doc.documentType + "_" + doc.bodyHtml.slice(0, 30)}
+                    content={doc.bodyHtml}
+                    onChange={(html) => handleFieldChange("bodyHtml", html)}
+                    regime={standardType === "party" ? "party" : "administrative"}
+                    minHeight="420px"
+                  />
+                ) : (
+                  <textarea
+                    rows={12}
+                    value={doc.bodyHtml}
+                    onChange={(e) => handleFieldChange("bodyHtml", e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-xs text-slate-800 font-mono leading-relaxed"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
