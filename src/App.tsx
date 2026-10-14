@@ -352,6 +352,22 @@ export default function App() {
 
   // AI Proposal Review Modal state (User Confirmation Gate)
   const [aiProposal, setAiProposal] = useState<DocumentState | null>(null);
+  const [aiProposalMeta, setAiProposalMeta] = useState<{
+    source: "gemini_ai" | "rule_fallback";
+    isFallback: boolean;
+    notice?: string;
+  } | null>(null);
+
+  // AI Refine Review Modal state (User Confirmation Gate for text polishing)
+  const [refineProposal, setRefineProposal] = useState<{
+    action: "proofread" | "formalize";
+    originalHtml: string;
+    refinedHtml: string;
+    label: string;
+    source: "gemini_ai" | "rule_fallback";
+    isFallback: boolean;
+    notice?: string;
+  } | null>(null);
 
   // Primary document state (Initial default is Template QD)
   const [doc, setDoc] = useState<DocumentState>(TEMPLATES[0].defaultData);
@@ -516,6 +532,11 @@ export default function App() {
         };
         // Open review modal so user explicitly approves AI changes (P0-04)
         setAiProposal(candidate);
+        setAiProposalMeta({
+          source: data.source || (data.isFallback ? "rule_fallback" : "gemini_ai"),
+          isFallback: Boolean(data.isFallback),
+          notice: data.notice
+        });
       } else {
         setErrorMsg(data.error || "AI tạm thời không khả dụng. Bạn có thể tự soạn thảo và áp dụng mẫu chuẩn NĐ 30.");
       }
@@ -529,14 +550,16 @@ export default function App() {
   // User accepts AI proposed structure
   const acceptAiProposal = () => {
     if (!aiProposal) return;
-    pushVersion(`Đồng ý áp dụng đề xuất AI (${standardType === 'party' ? 'HD 05' : 'NĐ 30'})`, aiProposal);
+    const sourceLabel = aiProposalMeta?.isFallback ? "Quy tắc dự phòng" : "AI Gemini";
+    pushVersion(`Đồng ý áp dụng đề xuất (${sourceLabel} - ${standardType === 'party' ? 'HD 05' : 'NĐ 30'})`, aiProposal);
     setDoc(aiProposal);
     setAiProposal(null);
-    setSuccessMsg("Đã áp dụng thành công cấu trúc thể thức AI vào tài liệu!");
+    setAiProposalMeta(null);
+    setSuccessMsg(`Đã áp dụng thành công cấu trúc thể thức (${sourceLabel}) vào tài liệu!`);
     setActiveTab("editor");
   };
 
-  // AI Refine text (Proofreading / Formalizing)
+  // AI Refine text (Proofreading / Formalizing) - Opens Review Modal with Before/After Diff
   const handleAiRefine = async (action: "proofread" | "formalize") => {
     setIsRefining(true);
     setErrorMsg("");
@@ -548,11 +571,16 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success && data.refined) {
-        const updated = { ...doc, bodyHtml: data.refined };
-        setDoc(updated);
         const actionLabel = action === 'proofread' ? 'Sửa lỗi chính tả & câu từ' : 'Nâng cấp văn phong hành chính';
-        pushVersion(`AI: ${actionLabel}`, updated);
-        setSuccessMsg(`Hoàn tất: ${actionLabel}!`);
+        setRefineProposal({
+          action,
+          originalHtml: doc.bodyHtml,
+          refinedHtml: data.refined,
+          label: actionLabel,
+          source: data.source || (data.isFallback ? "rule_fallback" : "gemini_ai"),
+          isFallback: Boolean(data.isFallback),
+          notice: data.notice
+        });
       } else {
         setErrorMsg(data.error || "Lỗi xử lý tinh chỉnh văn bản.");
       }
@@ -561,6 +589,20 @@ export default function App() {
     } finally {
       setIsRefining(false);
     }
+  };
+
+  const acceptRefineProposal = () => {
+    if (!refineProposal) return;
+    const updated = { ...doc, bodyHtml: refineProposal.refinedHtml };
+    setDoc(updated);
+    pushVersion(`AI: ${refineProposal.label}`, updated);
+    setSuccessMsg(`Đã phê duyệt và áp dụng: ${refineProposal.label}!`);
+    setRefineProposal(null);
+  };
+
+  const rejectRefineProposal = () => {
+    setRefineProposal(null);
+    setSuccessMsg("Đã hủy bỏ đề xuất chỉnh sửa văn bản.");
   };
 
   // Export to standard Microsoft Word (.docx) adhering to Decree 30 (P0-06)
@@ -652,7 +694,7 @@ export default function App() {
     setActiveTab("editor");
   };
 
-  // Quick fix helper from Compliance Inspector
+  // Quick fix helper from Compliance Inspector - strictly adheres to deterministic corrections, never fabricates fake data
   const applyQuickFix = (issue: any) => {
     if (issue.field === "orgHeader2" && issue.suggestion) {
       setDoc(prev => ({ ...prev, orgHeader2: issue.suggestion }));
@@ -660,10 +702,12 @@ export default function App() {
       setDoc(prev => ({ ...prev, nationalHeader1: issue.suggestion }));
     } else if (issue.field === "nationalHeader2" && typeof issue.suggestion === "string") {
       setDoc(prev => ({ ...prev, nationalHeader2: issue.suggestion }));
-    } else if (issue.field === "locationAndDate") {
-      setDoc(prev => ({ ...prev, locationAndDate: formatStandardDate("Hà Nội") }));
     } else if (issue.field === "referenceNumber" && issue.suggestion) {
       setDoc(prev => ({ ...prev, referenceNumber: issue.suggestion }));
+    } else {
+      setActiveTab("editor");
+      setSuccessMsg(`Vui lòng chỉnh sửa trực tiếp thông tin vào trình soạn thảo cho mục: ${issue.title}`);
+      return;
     }
     setSuccessMsg(`Đã áp dụng sửa nhanh cho: ${issue.title}`);
   };
@@ -1526,9 +1570,20 @@ export default function App() {
             <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-blue-50/50">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-sm text-slate-900">
-                  Đối chiếu kết quả phân tích AI trước khi áp dụng
-                </h3>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">
+                    Đối chiếu kết quả phân tích trước khi áp dụng
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      aiProposalMeta?.isFallback
+                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    }`}>
+                      {aiProposalMeta?.isFallback ? "Quy tắc dự phòng (Rule Fallback)" : "Trí tuệ nhân tạo (Gemini AI)"}
+                    </span>
+                  </div>
+                </div>
               </div>
               <button 
                 onClick={() => setAiProposal(null)}
@@ -1539,8 +1594,12 @@ export default function App() {
             </div>
 
             <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-900 text-xs">
-                <strong>Lưu ý:</strong> AI chỉ đóng vai trò phân tích và đề xuất cấu trúc. Bạn có toàn quyền xem trước, đối chiếu và quyết định áp dụng hoặc hủy bỏ mà không làm mất nội dung đang soạn thảo.
+              <div className={`rounded-xl p-3 text-xs border ${
+                aiProposalMeta?.isFallback 
+                  ? "bg-amber-50 border-amber-200 text-amber-900"
+                  : "bg-blue-50 border-blue-200 text-blue-900"
+              }`}>
+                <strong>Lưu ý:</strong> {aiProposalMeta?.notice || "Bạn có toàn quyền xem trước, đối chiếu và quyết định áp dụng hoặc hủy bỏ mà không làm mất nội dung đang soạn thảo."}
               </div>
 
               <div className="space-y-2 border border-slate-200 rounded-xl p-3.5 bg-slate-50">
@@ -1577,6 +1636,87 @@ export default function App() {
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow-xs"
               >
                 <Check className="w-4 h-4" /> Đồng ý áp dụng vào văn bản
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL 3: XÁC NHẬN TINH CHỈNH VĂN BẢN (P0: AI Text Review Gate)
+         ======================================================== */}
+      {refineProposal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-indigo-50/50">
+              <div className="flex items-center gap-2">
+                <Wand2 className="w-5 h-5 text-indigo-600" />
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">
+                    Phê duyệt đề xuất: {refineProposal.label}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      refineProposal.isFallback
+                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    }`}>
+                      {refineProposal.isFallback ? "Quy tắc dự phòng (Fallback)" : "Gemini AI tối ưu hóa"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={rejectRefineProposal}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+              <div className="bg-indigo-50/60 border border-indigo-200 rounded-xl p-3 text-indigo-950 text-xs">
+                <strong>Đối chiếu trước & sau:</strong> Hãy so sánh đoạn văn bản gốc và đề xuất sau khi tinh chỉnh. Bạn có thể nhấn <em>Áp dụng vào văn bản</em> để cập nhật hoặc <em>Hủy bỏ</em> để giữ nguyên.
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 flex flex-col">
+                  <div className="font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                    Nội dung hiện tại (Gốc):
+                  </div>
+                  <div 
+                    className="p-3 bg-white border border-slate-200 rounded-lg flex-1 max-h-60 overflow-y-auto text-[11px] leading-relaxed text-justify text-slate-700"
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(refineProposal.originalHtml) }}
+                  />
+                </div>
+
+                <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50/30 flex flex-col">
+                  <div className="font-bold text-indigo-900 mb-2 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                    Đề xuất mới (Đã tinh chỉnh):
+                  </div>
+                  <div 
+                    className="p-3 bg-white border border-indigo-200 rounded-lg flex-1 max-h-60 overflow-y-auto text-[11px] leading-relaxed text-justify text-slate-900"
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(refineProposal.refinedHtml) }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <button
+                onClick={rejectRefineProposal}
+                className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold px-4 py-2 rounded-xl text-xs transition"
+              >
+                Hủy bỏ (Giữ nguyên văn bản cũ)
+              </button>
+
+              <button
+                onClick={acceptRefineProposal}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow-xs"
+              >
+                <Check className="w-4 h-4" /> Áp dụng nội dung này
               </button>
             </div>
           </div>

@@ -236,7 +236,12 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
       const compliantDoc = enforceND30Standards(parsed, regime);
       console.log(`[COMPLIANCE] Processed document: type=${compliantDoc.documentType}, regime=${regime}`);
 
-      return res.json({ success: true, formatted: compliantDoc });
+      return res.json({ 
+        success: true, 
+        source: "gemini_ai",
+        isFallback: false,
+        formatted: compliantDoc 
+      });
     } catch (error: any) {
       console.warn("AI format or Zod validation failed, using rule-based fallback:", error.message);
       // Fallback parser + Compliance Middleware enforcement so user is NEVER blocked
@@ -246,8 +251,10 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
 
       return res.json({ 
         success: true, 
+        source: "rule_fallback",
+        isFallback: true,
         formatted: compliantFallback, 
-        notice: "Đã chuẩn hóa nội dung theo quy tắc chuẩn thể thức NĐ 30/2020/NĐ-CP (Rule Engine Fallback)." 
+        notice: "Hệ thống đã chuẩn hóa nội dung theo quy tắc chuẩn thể thức NĐ 30/2020/NĐ-CP (Rule Engine Fallback) do dịch vụ AI không khả dụng." 
       });
     }
   });
@@ -280,11 +287,22 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
       });
 
       const refined = response.text || text;
-      res.json({ success: true, refined: refined.replace(/```html/g, "").replace(/```/g, "").trim() });
+      res.json({ 
+        success: true, 
+        source: "gemini_ai",
+        isFallback: false,
+        refined: refined.replace(/```html/g, "").replace(/```/g, "").trim() 
+      });
     } catch (error: any) {
       console.warn("AI refine error:", error.message);
       // Return original text if AI fails
-      res.json({ success: true, refined: text, notice: "Không thể kết nối AI, giữ nguyên nội dung gốc." });
+      res.json({ 
+        success: true, 
+        source: "rule_fallback",
+        isFallback: true,
+        refined: text, 
+        notice: "Không thể kết nối AI, giữ nguyên nội dung gốc." 
+      });
     }
   });
 

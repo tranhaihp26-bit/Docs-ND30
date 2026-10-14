@@ -31,6 +31,42 @@ export const REFERENCE_NUMBER_REGEX = /^Số:\s*[\d\p{L}\.\-\/]+$/ui;
 export const LOCATION_AND_DATE_REGEX = /^[\p{L}\s\.\-]+,\s*ngày\s+(?:0?[1-9]|[12]\d|3[01])\s+tháng\s+(?:0?[1-9]|1[0-2])\s+năm\s+\d{4}$/u;
 
 /**
+ * Kiểm tra xem một giá trị chuỗi có phải là văn bản giữ chỗ (placeholder), mẫu minh họa, hoặc dữ liệu chưa hoàn thiện hay không.
+ */
+export function isPlaceholderValue(val?: string | null): boolean {
+  if (!val || typeof val !== "string") return true;
+  const s = val.trim();
+  if (!s) return true;
+  if (s.includes("...") || s.includes("…")) return true;
+  
+  if (/^\[.*\]$/s.test(s) || /^<.*>$/s.test(s) || /^\{.*\}$/s.test(s)) return true;
+
+  const lower = s.toLowerCase();
+  const placeholderPatterns = [
+    "[tên cơ quan",
+    "tên cơ quan",
+    "cơ quan ban hành",
+    "cơ quan chủ quản",
+    "[địa danh]",
+    "địa danh",
+    "nguyễn văn a",
+    "[họ và tên",
+    "họ và tên người ký",
+    "[chức vụ",
+    "chức vụ người ký",
+    "[trích yếu",
+    "trích yếu nội dung",
+    "vd:",
+    "ví dụ:",
+    "ví dụ",
+    "sample",
+    "placeholder"
+  ];
+
+  return placeholderPatterns.some(p => lower.includes(p));
+}
+
+/**
  * Zod Schema cho chuẩn thể thức văn bản hành chính và văn bản Đảng
  */
 export const DocumentFormatSchema = z.object({
@@ -213,14 +249,13 @@ export function validateND30Compliance(
   }
 
   // 3. Cơ quan ban hành
-  if (!doc.orgHeader2 || !doc.orgHeader2.trim() || doc.orgHeader2.includes("[Tên cơ quan")) {
+  if (isPlaceholderValue(doc.orgHeader2)) {
     issues.push({
       id: "orgHeader2",
       field: "orgHeader2",
       title: "Chưa xác định cơ quan ban hành",
-      message: "Tên cơ quan, tổ chức ban hành văn bản không được để trống hoặc là placeholder.",
+      message: "Tên cơ quan, tổ chức ban hành văn bản không được để trống hoặc là placeholder. Vui lòng nhập tên cơ quan thực tế.",
       severity: "error",
-      suggestion: "VD: ỦY BAN NHÂN DÂN THÀNH PHỐ / BỘ GIÁO DỤC VÀ ĐÀO TẠO",
     });
   } else if (doc.orgHeader2 !== doc.orgHeader2.toUpperCase()) {
     issues.push({
@@ -236,44 +271,44 @@ export function validateND30Compliance(
   }
 
   // 4. Số và ký hiệu văn bản
-  if (!doc.referenceNumber || !doc.referenceNumber.trim() || doc.referenceNumber.includes("...")) {
+  if (isPlaceholderValue(doc.referenceNumber)) {
     issues.push({
       id: "referenceNumber_empty",
       field: "referenceNumber",
-      title: "Chưa có số và ký hiệu văn bản",
-      message: "Văn bản chưa có số ký hiệu chính thức theo quy định Điều 10 NĐ 30/2020/NĐ-CP.",
+      title: "Chưa có số và ký hiệu văn bản chính thức",
+      message: "Văn bản chưa có số ký hiệu chính thức theo quy định Điều 10 NĐ 30/2020/NĐ-CP (đang sử dụng placeholder).",
       severity: "warning",
-      suggestion: isParty ? "Số: 01-NQ/TW" : "Số: 01/QĐ-UBND",
     });
   } else if (!REFERENCE_NUMBER_REGEX.test(doc.referenceNumber.trim())) {
     issues.push({
       id: "referenceNumber_format",
       field: "referenceNumber",
       title: "Số ký hiệu chưa đúng quy cách",
-      message: "Số ký hiệu phải bắt đầu bằng 'Số: ' kèm chữ số và ký hiệu viết tắt loại văn bản, cơ quan.",
+      message: "Số ký hiệu phải bắt đầu bằng 'Số: ' kèm chữ số và ký hiệu viết tắt loại văn bản, cơ quan (VD: Số: 125/QĐ-UBND).",
       severity: "warning",
-      suggestion: doc.referenceNumber.startsWith("Số:") ? doc.referenceNumber : `Số: ${doc.referenceNumber}`,
+      suggestion: doc.referenceNumber.startsWith("Số:") 
+        ? doc.referenceNumber 
+        : `Số: ${doc.referenceNumber.replace(/^Số\s*/i, "")}`,
     });
   } else {
     passedChecks++;
   }
 
   // 5. Địa danh và ngày tháng
-  if (!doc.locationAndDate || !doc.locationAndDate.trim() || doc.locationAndDate.includes("...")) {
+  if (isPlaceholderValue(doc.locationAndDate)) {
     issues.push({
       id: "locationAndDate_missing",
       field: "locationAndDate",
-      title: "Chưa xác định ngày ban hành hoặc địa danh",
-      message: "Văn bản chưa có địa danh hoặc ngày tháng ban hành cụ thể.",
+      title: "Chưa xác định địa danh hoặc ngày ban hành",
+      message: "Văn bản chưa có địa danh hoặc ngày tháng ban hành cụ thể (đang sử dụng placeholder).",
       severity: "warning",
-      suggestion: "Hà Nội, ngày 14 tháng 10 năm 2026",
     });
   } else if (!LOCATION_AND_DATE_REGEX.test(doc.locationAndDate.trim())) {
     issues.push({
       id: "locationAndDate_format",
       field: "locationAndDate",
       title: "Định dạng ngày tháng chưa chuẩn NĐ 30",
-      message: "Phải có định dạng: '[Địa danh], ngày ... tháng ... năm ...' (in nghiêng).",
+      message: "Phải có định dạng: '[Địa danh], ngày dd tháng mm năm yyyy' (in nghiêng). Ngày dưới 10 và tháng 1, 2 phải có số 0 ở trước.",
       severity: "warning",
     });
   } else {
@@ -289,12 +324,12 @@ export function validateND30Compliance(
       message: "Cần xác định loại văn bản (QUYẾT ĐỊNH, CÔNG VĂN, BÁO CÁO, KẾ HOẠCH...).",
       severity: "error",
     });
-  } else if (!doc.subject || !doc.subject.trim() || doc.subject.includes("[Trích yếu")) {
+  } else if (isPlaceholderValue(doc.subject)) {
     issues.push({
       id: "subject",
       field: "subject",
       title: "Trích yếu nội dung còn để trống",
-      message: "Trích yếu nội dung phải tóm tắt ngắn gọn, chính xác mục đích ban hành của văn bản.",
+      message: "Trích yếu nội dung phải tóm tắt ngắn gọn, chính xác mục đích ban hành của văn bản (tránh để placeholder).",
       severity: "warning",
     });
   } else {
@@ -316,28 +351,26 @@ export function validateND30Compliance(
   }
 
   // 8. Chức vụ & Người ký
-  if (!doc.signName || !doc.signName.trim() || doc.signName.includes("[Họ và tên") || doc.signName === "Nguyễn Văn A") {
+  if (isPlaceholderValue(doc.signName)) {
     issues.push({
       id: "signName",
       field: "signName",
       title: "Chưa xác định họ tên người ký",
-      message: "Họ và tên người ký cần được ghi rõ ràng (chữ thường, đứng, đậm). Tránh để họ tên giả định.",
+      message: "Họ và tên người ký cần được ghi rõ ràng (chữ thường, đứng, đậm). Tránh để họ tên giả định hoặc placeholder.",
       severity: "warning",
-      suggestion: "Ghi rõ họ và tên người có thẩm quyền ký",
     });
   } else {
     passedChecks++;
   }
 
   // 9. Nơi nhận
-  if (!doc.recipients || !doc.recipients.trim()) {
+  if (!doc.recipients || !doc.recipients.trim() || doc.recipients.includes("...")) {
     issues.push({
       id: "recipients",
       field: "recipients",
-      title: "Chưa có nơi nhận văn bản",
+      title: "Chưa có nơi nhận văn bản cụ thể",
       message: "Cần chỉ định nơi nhận văn bản và bộ phận lưu trữ văn thư (Lưu: VT...).",
       severity: "warning",
-      suggestion: "Như trên;\nLưu: VT.",
     });
   } else {
     passedChecks++;

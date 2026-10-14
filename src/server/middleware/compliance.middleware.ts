@@ -10,7 +10,7 @@
  *    (Override) và xác thực thành công qua Zod Schema.
  */
 
-import { DocumentFormatSchema, type DocumentFormatType, LOCATION_AND_DATE_REGEX } from "../../shared/schemas/document.schema.ts";
+import { DocumentFormatSchema, type DocumentFormatType, LOCATION_AND_DATE_REGEX, isPlaceholderValue } from "../../shared/schemas/document.schema.ts";
 
 /**
  * Tạo chuỗi địa danh và ngày, tháng, năm theo đúng quy định Phụ lục I Mục II.2 Nghị định 30/2020/NĐ-CP:
@@ -31,24 +31,24 @@ export function formatStandardDate(location: string = "Hà Nội", date: Date = 
  * Trích xuất địa danh từ chuỗi do AI sinh ra (nếu có)
  */
 export function extractLocation(rawDateStr?: string): string {
-  if (!rawDateStr || typeof rawDateStr !== "string") return "Hà Nội";
+  if (!rawDateStr || typeof rawDateStr !== "string") return "";
   
-  // Tách phần địa danh trước dấu phẩy hoặc từ "ngày"
+  let loc = "";
   const commaIdx = rawDateStr.indexOf(",");
   if (commaIdx > 0) {
-    const loc = rawDateStr.slice(0, commaIdx).trim();
-    if (loc.length >= 2 && !/^(ngày|tháng|năm|số)/i.test(loc)) {
-      return loc;
+    loc = rawDateStr.slice(0, commaIdx).trim();
+  } else {
+    const ngayMatch = rawDateStr.match(/^(.*?)\s+ngày/i);
+    if (ngayMatch && ngayMatch[1]) {
+      loc = ngayMatch[1].trim();
     }
   }
 
-  const ngayMatch = rawDateStr.match(/^(.*?)\s+ngày/i);
-  if (ngayMatch && ngayMatch[1]) {
-    const loc = ngayMatch[1].trim();
-    if (loc.length >= 2) return loc;
+  if (loc && loc.length >= 2 && !isPlaceholderValue(loc) && !/^(ngày|tháng|năm|số|cộng|độc|tiêu)/i.test(loc)) {
+    return loc;
   }
 
-  return "Hà Nội";
+  return "";
 }
 
 /**
@@ -147,8 +147,7 @@ export function enforceND30Standards(
     locationAndDate = "[Địa danh], ngày ... tháng ... năm ...";
   } else if (!LOCATION_AND_DATE_REGEX.test(locationAndDate)) {
     const loc = extractLocation(locationAndDate);
-    // Nếu có địa danh hợp lệ nhưng ngày tháng sai định dạng
-    if (loc && loc !== "Hà Nội") {
+    if (loc) {
       locationAndDate = `${loc}, ngày ... tháng ... năm ...`;
     } else {
       locationAndDate = "[Địa danh], ngày ... tháng ... năm ...";
