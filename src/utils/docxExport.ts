@@ -20,7 +20,7 @@ import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
   WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip 
 } from "docx";
-import { DocumentFormatType } from "../shared/schemas/document.schema.ts";
+import type { DocumentFormatType } from "../shared/schemas/document.schema.ts";
 
 /**
  * Định nghĩa kích thước lề trang chuẩn Nghị định 30/2020/NĐ-CP (Phụ lục I Mục I.3)
@@ -32,11 +32,19 @@ export const ND30_PAGE_MARGINS = {
   right: convertMillimetersToTwip(15),   // 15mm = 850 dxa
 };
 
+/** Đường viền ẩn cho các bảng cấu trúc 2 cột (Header, Signature) */
+const INVISIBLE_CELL_BORDER = {
+  top: { style: BorderStyle.NONE, size: 0, color: "auto" },
+  bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
+  left: { style: BorderStyle.NONE, size: 0, color: "auto" },
+  right: { style: BorderStyle.NONE, size: 0, color: "auto" },
+};
+
 /**
- * Chuyển đổi mã HTML từ Tiptap Editor thành danh sách Paragraph trong DOCX
+ * Chuyển đổi mã HTML từ Tiptap Editor thành danh sách Paragraph & Table trong DOCX
  */
-export function convertHtmlToDocxElements(html: string): Paragraph[] {
-  const paragraphs: Paragraph[] = [];
+export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
 
   // Sử dụng DOMParser nếu chạy trong môi trường trình duyệt
   if (typeof window !== "undefined" && typeof window.DOMParser !== "undefined") {
@@ -57,9 +65,51 @@ export function convertHtmlToDocxElements(html: string): Paragraph[] {
       if (isCentered) alignment = AlignmentType.CENTER;
       else if (isRight) alignment = AlignmentType.RIGHT;
 
+      // Xử lý bảng biểu HTML nếu có
+      if (tagName === "table") {
+        const trElements = Array.from(child.querySelectorAll("tr"));
+        if (trElements.length > 0) {
+          const docxRows = trElements.map(tr => {
+            const cellElements = Array.from(tr.children).filter(
+              c => c.tagName.toLowerCase() === "td" || c.tagName.toLowerCase() === "th"
+            );
+            return new TableRow({
+              children: cellElements.map(cell => {
+                const isHeader = cell.tagName.toLowerCase() === "th";
+                const cellRuns = parseInlineNodes(cell);
+                return new TableCell({
+                  children: [
+                    new Paragraph({
+                      alignment: isHeader ? AlignmentType.CENTER : AlignmentType.LEFT,
+                      spacing: { line: 240, before: 40, after: 40 },
+                      children: cellRuns.length > 0 ? cellRuns : [
+                        new TextRun({
+                          text: cell.textContent?.trim() || "",
+                          font: "Times New Roman",
+                          size: 24, // 12pt
+                          bold: isHeader,
+                        }),
+                      ],
+                    }),
+                  ],
+                });
+              }),
+            });
+          });
+
+          elements.push(
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: docxRows,
+            })
+          );
+          return;
+        }
+      }
+
       // Xử lý các thẻ tiêu đề (H1, H2, H3) theo chuẩn NĐ 30
       if (tagName === "h1") {
-        paragraphs.push(
+        elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { before: 180, after: 80, line: 276 },
@@ -77,7 +127,7 @@ export function convertHtmlToDocxElements(html: string): Paragraph[] {
       }
 
       if (tagName === "h2") {
-        paragraphs.push(
+        elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { before: 140, after: 60, line: 276 },
@@ -95,7 +145,7 @@ export function convertHtmlToDocxElements(html: string): Paragraph[] {
       }
 
       if (tagName === "h3") {
-        paragraphs.push(
+        elements.push(
           new Paragraph({
             alignment: AlignmentType.LEFT,
             indent: { firstLine: 720 }, // 1.27cm
@@ -116,7 +166,7 @@ export function convertHtmlToDocxElements(html: string): Paragraph[] {
       // Xử lý danh sách (ul/ol)
       if (tagName === "ul" || tagName === "ol") {
         Array.from(child.children).forEach((li) => {
-          paragraphs.push(
+          elements.push(
             new Paragraph({
               bullet: tagName === "ul" ? { level: 0 } : undefined,
               indent: { left: 720 },
@@ -132,7 +182,7 @@ export function convertHtmlToDocxElements(html: string): Paragraph[] {
       const runs = parseInlineNodes(child);
       const isArticleHeader = /^(Điều\s+\d+|Khoản\s+\d+|Điểm\s+[a-zđ])/i.test(textContent);
       
-      paragraphs.push(
+      elements.push(
         new Paragraph({
           alignment,
           indent: isCentered || isRight ? undefined : { firstLine: 720 }, // Thụt đầu dòng 1.27cm theo NĐ 30
@@ -146,13 +196,13 @@ export function convertHtmlToDocxElements(html: string): Paragraph[] {
       );
     });
 
-    return paragraphs;
+    return elements;
   }
 
   // Fallback: Regex parser nếu không có DOMParser
   const lines = html.replace(/<[^>]*>/g, "\n").split("\n").map(l => l.trim()).filter(Boolean);
   lines.forEach((line) => {
-    paragraphs.push(
+    elements.push(
       new Paragraph({
         alignment: AlignmentType.JUSTIFIED,
         indent: { firstLine: 720 },
@@ -164,7 +214,7 @@ export function convertHtmlToDocxElements(html: string): Paragraph[] {
     );
   });
 
-  return paragraphs;
+  return elements;
 }
 
 /**
@@ -223,6 +273,10 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const isParty = data.regime === "party";
   const bodyParagraphs = convertHtmlToDocxElements(data.bodyHtml);
 
+  const nationalHeader1Text = isParty
+    ? "ĐẢNG CỘNG SẢN VIỆT NAM"
+    : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
+
   return new Document({
     styles: {
       default: {
@@ -265,6 +319,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                   // Cột trái: Tên cơ quan chủ quản, Tên cơ quan ban hành, Số ký hiệu
                   new TableCell({
                     width: { size: 45, type: WidthType.PERCENTAGE },
+                    borders: INVISIBLE_CELL_BORDER,
                     children: [
                       ...(data.orgHeader1 ? [
                         new Paragraph({
@@ -321,20 +376,21 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                   // Cột phải: Quốc hiệu, Tiêu ngữ, Địa danh & Ngày tháng năm
                   new TableCell({
                     width: { size: 55, type: WidthType.PERCENTAGE },
+                    borders: INVISIBLE_CELL_BORDER,
                     children: [
                       new Paragraph({
                         alignment: AlignmentType.CENTER,
                         spacing: { line: 240, after: 20 },
                         children: [
                           new TextRun({
-                            text: data.nationalHeader1.toUpperCase(),
+                            text: nationalHeader1Text,
                             font: "Times New Roman",
                             size: isParty ? 26 : 24, // 12pt - 13pt, in hoa, đứng, đậm
                             bold: true,
                           }),
                         ],
                       }),
-                      ...(!isParty || data.nationalHeader2 ? [
+                      ...(!isParty && data.nationalHeader2 ? [
                         new Paragraph({
                           alignment: AlignmentType.CENTER,
                           spacing: { line: 240, after: 20 },
@@ -443,6 +499,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                   // Cột trái: Nơi nhận (cỡ 12pt, nghiêng, đậm; các dòng con cỡ 11pt, thường)
                   new TableCell({
                     width: { size: 50, type: WidthType.PERCENTAGE },
+                    borders: INVISIBLE_CELL_BORDER,
                     children: [
                       new Paragraph({
                         spacing: { line: 240, after: 40 },
@@ -478,6 +535,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                   // Cột phải: Chức vụ, chữ ký, họ và tên
                   new TableCell({
                     width: { size: 50, type: WidthType.PERCENTAGE },
+                    borders: INVISIBLE_CELL_BORDER,
                     children: [
                       // Chức vụ (in hoa, đứng, đậm, cỡ 13-14pt)
                       ...data.signTitle

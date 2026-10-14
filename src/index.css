@@ -47,7 +47,7 @@
     border: none !important;
     box-shadow: none !important;
     margin: 0 auto !important;
-    padding: 20mm 15mm 20mm 25mm !important; /* Top 20mm, Right 15mm, Bottom 20mm, Left 25mm (NĐ 30 standard) */
+    padding: 20mm 15mm 20mm 30mm !important; /* Top 20mm, Right 15mm, Bottom 20mm, Left 30mm (NĐ 30 standard) */
     width: 210mm !important;
     min-height: 297mm !important;
     max-width: none !important;

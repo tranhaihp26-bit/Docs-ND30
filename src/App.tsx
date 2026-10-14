@@ -9,7 +9,7 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import ND30Editor from "./components/ND30Editor.tsx";
 import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
-import { DocumentFormatType } from "./shared/schemas/document.schema.ts";
+import type { DocumentFormatType } from "./shared/schemas/document.schema.ts";
 
 interface DocumentState {
   orgHeader1: string;
@@ -276,17 +276,24 @@ export default function App() {
   const selectTemplate = (tId: string) => {
     const t = TEMPLATES.find(x => x.id === tId);
     if (!t) return;
+    const isParty = t.type === 'party';
     setStandardType(t.type as any);
     let title = t.name.toUpperCase();
     let sampleBody = `<p><strong>Căn cứ các quy định pháp luật hiện hành;</strong></p><p><strong>Xét đề nghị của cơ quan chuyên môn...</strong></p><p style="text-align: center;"><strong>QUYẾT ĐỊNH:</strong></p><p><strong>Điều 1.</strong> Nội dung chi tiết của ${t.name} theo đúng thẩm quyền được phân công.</p><p><strong>Điều 2.</strong> Thủ trưởng các đơn vị có liên quan chịu trách nhiệm thi hành Quyết định này./.</p>`;
     
-    if (t.type === 'party') {
+    if (isParty) {
       title = "NGHỊ QUYẾT";
       sampleBody = `<p><strong>Căn cứ Điều lệ Đảng Cộng sản Việt Nam;</strong></p><p><strong>Căn cứ Chương trình công tác toàn khóa của Ban Chấp hành;</strong></p><p style="text-align: center;"><strong>BAN CHẤP HÀNH NGHỊ QUYẾT:</strong></p><p><strong>1. Mục tiêu và phương hướng:</strong> Tiếp tục đổi mới phương thức lãnh đạo, nâng cao năng lực và sức chiến đấu của tổ chức cơ sở đảng.</p><p><strong>2. Tổ chức thực hiện:</strong> Các cấp ủy trực thuộc có trách nhiệm phổ biến và triển khai thực hiện./.</p>`;
     }
 
     const updated: DocumentState = {
       ...doc,
+      nationalHeader1: isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: isParty ? "" : "Độc lập - Tự do - Hạnh phúc",
+      orgHeader1: isParty ? "ĐẢNG BỘ TỈNH/THÀNH PHỐ" : (doc.orgHeader1 || "ỦY BAN NHÂN DÂN THÀNH PHỐ"),
+      orgHeader2: isParty ? "BAN THƯỜNG VỤ" : (doc.orgHeader2 || "VĂN PHÒNG ỦY BAN"),
+      signTitle: isParty ? "TM. BAN THƯỜNG VỤ\nBÍ THƯ" : "TM. ỦY BAN NHÂN DÂN\nCHỦ TỊCH",
+      recipients: isParty ? "Như trên;\nLưu: VT, Ban Tổ chức." : "Như Điều 3;\nLưu: VT, TH.",
       documentType: title,
       subject: `V/v ${t.name.toLowerCase()} theo quy định hiện hành`,
       bodyHtml: sampleBody
@@ -301,10 +308,11 @@ export default function App() {
     setIsExportingDocx(true);
     setErrorMsg("");
     try {
+      const isParty = standardType === "party";
       const documentData: DocumentFormatType = {
-        regime: standardType === "party" ? "party" : "administrative",
-        nationalHeader1: doc.nationalHeader1 as any,
-        nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+        regime: isParty ? "party" : "administrative",
+        nationalHeader1: isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+        nationalHeader2: (isParty ? "" : "Độc lập - Tự do - Hạnh phúc") as "" | "Độc lập - Tự do - Hạnh phúc",
         fontFamily: "Times New Roman",
         fontSize: 13,
         orgHeader1: doc.orgHeader1,
@@ -569,7 +577,23 @@ export default function App() {
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Tiêu chuẩn thể thức áp dụng:</label>
                     <select
                       value={standardType}
-                      onChange={(e: any) => setStandardType(e.target.value)}
+                      onChange={(e: any) => {
+                        const newType = e.target.value as "state" | "party";
+                        setStandardType(newType);
+                        if (newType === "party") {
+                          setDoc(prev => ({
+                            ...prev,
+                            nationalHeader1: "ĐẢNG CỘNG SẢN VIỆT NAM",
+                            nationalHeader2: "",
+                          }));
+                        } else {
+                          setDoc(prev => ({
+                            ...prev,
+                            nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+                            nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+                          }));
+                        }
+                      }}
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
                     >
                       <option value="state">Nghị định 30/2020/NĐ-CP (Hành chính Nhà nước)</option>
@@ -736,7 +760,7 @@ export default function App() {
 
                 {editorMode === "rich" ? (
                   <ND30Editor
-                    key={doc.documentType + "_" + doc.bodyHtml.slice(0, 30)}
+                    key={standardType}
                     content={doc.bodyHtml}
                     onChange={(html) => handleFieldChange("bodyHtml", html)}
                     regime={standardType === "party" ? "party" : "administrative"}
@@ -895,8 +919,14 @@ export default function App() {
                 </div>
                 <div>
                   <p className="font-bold uppercase text-[10.5px] leading-tight text-slate-900">{doc.nationalHeader1}</p>
-                  <p className="font-bold text-[10.5px] leading-tight mt-0.5 text-slate-900">{doc.nationalHeader2}</p>
-                  <div className="w-20 h-0.5 bg-slate-900 mx-auto my-1"></div>
+                  {standardType !== "party" && doc.nationalHeader2 ? (
+                    <>
+                      <p className="font-bold text-[10.5px] leading-tight mt-0.5 text-slate-900">{doc.nationalHeader2}</p>
+                      <div className="w-20 h-0.5 bg-slate-900 mx-auto my-1"></div>
+                    </>
+                  ) : (
+                    <div className="w-20 h-0.5 bg-slate-900 mx-auto my-1"></div>
+                  )}
                   <p className="text-[9.5px] italic mt-1 text-slate-800">{doc.locationAndDate}</p>
                 </div>
               </div>

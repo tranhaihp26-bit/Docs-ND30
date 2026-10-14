@@ -14,16 +14,17 @@
  * 5. Giữ vững font Times New Roman và giãn dòng 1.15 - 1.25 chuẩn NĐ 30.
  */
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
+import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
 import { 
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, List, ListOrdered, Undo, Redo, 
   Heading1, Heading2, Heading3, FileText, Building2, Scale, 
-  PenTool, PlusCircle, Bookmark
+  PenTool, PlusCircle, Bookmark, MapPin, Tag
 } from "lucide-react";
 
 export interface ND30EditorProps {
@@ -58,6 +59,12 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
         alignments: ["left", "center", "right", "justify"],
         defaultAlignment: "justify",
       }),
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content,
     editorProps: {
@@ -70,6 +77,13 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
       onChange(editor.getHTML());
     },
   });
+
+  // Synchronize content when external prop changes (e.g. AI format, template change, version restore)
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      editor.commands.setContent(content, { emitUpdate: false });
+    }
+  }, [content, editor]);
 
   if (!editor) {
     return null;
@@ -103,6 +117,24 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
       <p style="text-align: center;">${refNum}</p>
       <p></p>
     `;
+    editor.chain().focus().insertContent(htmlSnippet).run();
+  };
+
+  // ACTION: Chèn Địa danh & Ngày tháng (Canh phải, in nghiêng, chuẩn NĐ 30)
+  const insertLocationAndDate = () => {
+    const today = new Date();
+    const day = today.getDate();
+    const month = today.getMonth() + 1;
+    const year = today.getFullYear();
+    const dayStr = day < 10 ? `0${day}` : `${day}`;
+    const monthStr = (month === 1 || month === 2) ? `0${month}` : `${month}`;
+    const htmlSnippet = `<p style="text-align: right;"><em>Hà Nội, ngày ${dayStr} tháng ${monthStr} năm ${year}</em></p><p></p>`;
+    editor.chain().focus().insertContent(htmlSnippet).run();
+  };
+
+  // ACTION: Chèn Trích yếu nội dung (Căn giữa, in đậm và nghiêng)
+  const insertSubject = () => {
+    const htmlSnippet = `<p style="text-align: center;"><strong><em>V/v [Trích yếu nội dung văn bản ngắn gọn, súc tích]</em></strong></p><p></p>`;
     editor.chain().focus().insertContent(htmlSnippet).run();
   };
 
@@ -178,6 +210,26 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
           title="Chèn Tên cơ quan ban hành văn bản"
         >
           <Building2 className="w-3.5 h-3.5 text-emerald-600" /> Cơ quan ban hành
+        </button>
+
+        {/* Nút Chèn Địa danh & Ngày tháng */}
+        <button
+          type="button"
+          onClick={insertLocationAndDate}
+          className="bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-700 border border-slate-300 px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 shadow-2xs"
+          title="Chèn Địa danh & Ngày tháng (canh phải, in nghiêng chuẩn NĐ 30)"
+        >
+          <MapPin className="w-3.5 h-3.5 text-cyan-600" /> Địa danh & Ngày tháng
+        </button>
+
+        {/* Nút Chèn Trích yếu */}
+        <button
+          type="button"
+          onClick={insertSubject}
+          className="bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-700 border border-slate-300 px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 shadow-2xs"
+          title="Chèn Trích yếu nội dung văn bản (căn giữa, đậm, nghiêng)"
+        >
+          <Tag className="w-3.5 h-3.5 text-orange-600" /> Trích yếu
         </button>
 
         {/* Nút Chèn Căn cứ pháp lý */}

@@ -1,13 +1,17 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import { fileURLToPath } from "url";
 import multer from "multer";
 import mammoth from "mammoth";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import { enforceND30Standards } from "./src/server/middleware/compliance.middleware.ts";
+import { enforceND30Standards, formatStandardDate } from "./src/server/middleware/compliance.middleware.ts";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -55,14 +59,13 @@ function fallbackRuleBasedParser(rawText: string, standardType: string) {
     htmlBody = `<p>${rawText}</p>`;
   }
 
-  const today = new Date();
-  const dateStr = `Hà Nội, ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`;
+  const dateStr = formatStandardDate("Hà Nội");
 
   return {
     orgHeader1: isParty ? "ĐẢNG BỘ TỈNH/THÀNH PHỐ" : "UBND TỈNH/THÀNH PHỐ",
     orgHeader2: isParty ? "BAN THƯỜNG VỤ / VĂN PHÒNG" : "VĂN PHÒNG / SỞ BAN NGÀNH",
     nationalHeader1: isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
-    nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+    nationalHeader2: isParty ? "" : "Độc lập - Tự do - Hạnh phúc",
     locationAndDate: dateStr,
     documentType: docType,
     referenceNumber: `Số: 01/${docType.slice(0, 2).toUpperCase()}`,
@@ -145,16 +148,21 @@ async function startServer() {
       ? "Hướng dẫn số 05-HD/VPTW về thể thức và kỹ thuật trình bày văn bản của Đảng"
       : "Nghị định số 30/2020/NĐ-CP của Chính phủ về công tác văn thư và thể thức trình bày văn bản hành chính nhà nước";
 
+    const safeRawText = String(rawText || '').slice(0, 30000);
+    const safeInstructions = typeof customInstructions === 'string' 
+      ? customInstructions.slice(0, 500).replace(/[`${}\\]/g, ' ').trim() 
+      : 'Không có';
+
     const prompt = `
 Bạn là chuyên gia hàng đầu về soạn thảo văn bản hành chính Nhà nước và văn bản Đảng Việt Nam.
 Hãy phân tích nội dung văn bản gốc dưới đây và chuẩn hóa lại cấu trúc, ngôn ngữ, thể thức theo chuẩn: ${standardDesc}.
 
 Nội dung văn bản gốc:
 \`\`\`
-${rawText}
+${safeRawText}
 \`\`\`
 
-Yêu cầu bổ sung từ người dùng: ${customInstructions || 'Không có'}
+Yêu cầu bổ sung từ người dùng: ${safeInstructions || 'Không có'}
 
 Quy định cấu trúc:
 1. Cơ quan ban hành (orgHeader1, orgHeader2)
@@ -171,7 +179,7 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
   "orgHeader1": "Tên cơ quan chủ quản (nếu có, VD: BỘ GIÁO DỤC VÀ ĐÀO TẠO)",
   "orgHeader2": "Tên cơ quan ban hành (VD: TRƯỜNG ĐẠI HỌC KHOA HỌC)",
   "nationalHeader1": "${standardType === 'party' ? 'ĐẢNG CỘNG SẢN VIỆT NAM' : 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM'}",
-  "nationalHeader2": "Độc lập - Tự do - Hạnh phúc",
+  "nationalHeader2": "${standardType === 'party' ? '' : 'Độc lập - Tự do - Hạnh phúc'}",
   "locationAndDate": "Địa danh, ngày ... tháng ... năm ...",
   "documentType": "Tên loại văn bản (VD: QUYẾT ĐỊNH, CÔNG VĂN, KẾ HOẠCH, BÁO CÁO, TỜ TRÌNH, THÔNG BÁO...)",
   "referenceNumber": "Số: .../QĐ-...",
@@ -206,7 +214,9 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
 
       // DETERMINISTIC SAFETY NET: Cưỡng chế thể thức NĐ 30 & Zod Schema Validation
       const regime = standardType === "party" ? "party" : "administrative";
+      console.log("[COMPLIANCE] Raw AI output received:", parsed);
       const compliantDoc = enforceND30Standards(parsed, regime);
+      console.log("[COMPLIANCE] After enforcement & Zod validation:", compliantDoc);
 
       return res.json({ success: true, formatted: compliantDoc });
     } catch (error: any) {
@@ -243,7 +253,8 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
         instruction = "Cải thiện văn bản sau đây theo chuẩn thể thức văn bản hành chính:";
       }
 
-      const prompt = `${instruction}\n\n\`\`\`html\n${text}\n\`\`\`\n\nChỉ trả về đoạn HTML đã được tối ưu hóa, không giải thích thêm.`;
+    const safeText = String(text || '').slice(0, 15000);
+    const prompt = `${instruction}\n\n\`\`\`html\n${safeText}\n\`\`\`\n\nChỉ trả về đoạn HTML đã được tối ưu hóa, không giải thích thêm.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3.8-flash",

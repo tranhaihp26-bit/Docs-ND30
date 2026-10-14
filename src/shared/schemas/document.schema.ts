@@ -12,19 +12,23 @@ import { z } from "zod";
 
 /**
  * Regex chuẩn hóa số, ký hiệu văn bản theo Điều 8 & Phụ lục I Nghị định 30/2020/NĐ-CP
- * Ví dụ hợp lệ:
+ * Linh hoạt chấp nhận các định dạng thực tế:
  * - Văn bản QPPL / Cá biệt: "Số: 123/QĐ-UBND", "Số: 45/2026/NĐ-CP"
- * - Công văn hành chính: "Số: 12/STP-VP"
- * - Văn bản Đảng: "Số: 01-NQ/TW", "Số: 15-HD/BTCTW"
+ * - Công văn hành chính: "Số: 12/STP-VP", "Số: 123"
+ * - Văn bản Đảng: "Số: 01-NQ/TW", "Số: 15-HD/BTCTW", "Số: 12-QĐ/TU"
  */
-export const REFERENCE_NUMBER_REGEX = /^Số:\s*[\d\w\.\-]+(\/|-)[\d\w\.\-\/]+$/i;
+export const REFERENCE_NUMBER_REGEX = /^Số:\s*[\d\p{L}\.\-\/]+$/ui;
 
 /**
  * Regex chuẩn hóa địa danh và ngày, tháng, năm ban hành văn bản:
  * Phải có dạng: "[Tên địa danh], ngày [dd] tháng [mm] năm [yyyy]"
- * Ví dụ: "Hà Nội, ngày 13 tháng 10 năm 2026"
+ * Hỗ trợ cả số ngày/tháng có số 0 ở đầu và không có số 0 ở đầu, địa danh có dấu chấm viết tắt (TP., TX.)
+ * Ví dụ: 
+ * - "Hà Nội, ngày 13 tháng 10 năm 2026"
+ * - "TP. Hồ Chí Minh, ngày 05 tháng 02 năm 2026"
+ * - "TX. Sơn Tây, ngày 5 tháng 3 năm 2026"
  */
-export const LOCATION_AND_DATE_REGEX = /^[\p{L}\s\.\-]+,\s*ngày\s+\d{1,2}\s+tháng\s+\d{1,2}\s+năm\s+\d{4}$/u;
+export const LOCATION_AND_DATE_REGEX = /^[\p{L}\s\.\-]+,\s*ngày\s+(?:0?[1-9]|[12]\d|3[01])\s+tháng\s+(?:0?[1-9]|1[0-2])\s+năm\s+\d{4}$/u;
 
 /**
  * Zod Schema cho chuẩn thể thức văn bản hành chính và văn bản Đảng
@@ -49,9 +53,13 @@ export const DocumentFormatSchema = z.object({
 
   /**
    * Tiêu ngữ (Dòng 2):
-   * Bắt buộc là "Độc lập - Tự do - Hạnh phúc" (chữ in thường, cỡ 13-14, đứng, đậm)
+   * - Nhà nước: "Độc lập - Tự do - Hạnh phúc" (chữ in thường, cỡ 13-14, đứng, đậm)
+   * - Đảng: Để trống "" (Hướng dẫn số 05-HD/VPTW không có tiêu ngữ)
    */
-  nationalHeader2: z.literal("Độc lập - Tự do - Hạnh phúc"),
+  nationalHeader2: z.union([
+    z.literal("Độc lập - Tự do - Hạnh phúc"),
+    z.literal("")
+  ]).default("Độc lập - Tự do - Hạnh phúc"),
 
   /**
    * Phông chữ bắt buộc: Times New Roman (Nghị định 30 Điều 8 khoản 1)

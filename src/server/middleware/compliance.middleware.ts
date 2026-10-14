@@ -10,24 +10,27 @@
  *    (Override) và xác thực thành công qua Zod Schema.
  */
 
-import { DocumentFormatSchema, DocumentFormatType, LOCATION_AND_DATE_REGEX } from "../../shared/schemas/document.schema.ts";
+import { DocumentFormatSchema, type DocumentFormatType, LOCATION_AND_DATE_REGEX } from "../../shared/schemas/document.schema.ts";
 
 /**
- * Tạo chuỗi địa danh và ngày, tháng, năm theo đúng mẫu NĐ 30/2020/NĐ-CP
- * Ví dụ: "Hà Nội, ngày 13 tháng 10 năm 2026"
+ * Tạo chuỗi địa danh và ngày, tháng, năm theo đúng quy định Phụ lục I Mục II.2 Nghị định 30/2020/NĐ-CP:
+ * - Đối với những ngày nhỏ hơn 10 (từ ngày 01 đến ngày 09) và tháng 1, tháng 2 phải ghi thêm số 0 ở trước.
+ * - Ví dụ: "Hà Nội, ngày 05 tháng 02 năm 2026", "Hải Phòng, ngày 15 tháng 3 năm 2026".
  */
 export function formatStandardDate(location: string = "Hà Nội", date: Date = new Date()): string {
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = date.getDate();
+  const month = date.getMonth() + 1;
   const year = date.getFullYear();
+  const dayStr = day < 10 ? `0${day}` : `${day}`;
+  const monthStr = (month === 1 || month === 2) ? `0${month}` : `${month}`;
   const cleanLocation = location.trim().replace(/,$/, "") || "Hà Nội";
-  return `${cleanLocation}, ngày ${day} tháng ${month} năm ${year}`;
+  return `${cleanLocation}, ngày ${dayStr} tháng ${monthStr} năm ${year}`;
 }
 
 /**
  * Trích xuất địa danh từ chuỗi do AI sinh ra (nếu có)
  */
-function extractLocation(rawDateStr?: string): string {
+export function extractLocation(rawDateStr?: string): string {
   if (!rawDateStr || typeof rawDateStr !== "string") return "Hà Nội";
   
   // Tách phần địa danh trước dấu phẩy hoặc từ "ngày"
@@ -52,7 +55,7 @@ function extractLocation(rawDateStr?: string): string {
  * Chuẩn hóa số ký hiệu văn bản theo NĐ 30 Điều 10
  * Đảm bảo bắt đầu bằng tiền tố "Số: "
  */
-function normalizeReferenceNumber(rawNum?: string, docType: string = "CV"): string {
+export function normalizeReferenceNumber(rawNum?: string, docType: string = "CV"): string {
   if (!rawNum || typeof rawNum !== "string" || !rawNum.trim()) {
     const acronym = docType
       .split(/\s+/)
@@ -75,16 +78,22 @@ function normalizeReferenceNumber(rawNum?: string, docType: string = "CV"): stri
 /**
  * Làm sạch và định dạng lại nội dung HTML để đảm bảo an toàn & đúng ngữ nghĩa
  */
-function sanitizeBodyHtml(rawHtml?: string): string {
+export function sanitizeBodyHtml(rawHtml?: string): string {
   if (!rawHtml || typeof rawHtml !== "string" || !rawHtml.trim()) {
     return "<p>Văn bản chưa có nội dung chi tiết.</p>";
   }
 
-  // Loại bỏ các thẻ script, iframe, style nguy hiểm
+  // Loại bỏ các thẻ nguy hiểm
   let cleaned = rawHtml
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, "")
+    .replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, "")
+    .replace(/<applet\b[^<]*(?:(?!<\/applet>)<[^<]*)*<\/applet>/gi, "")
+    .replace(/<\/?(form|input|button|textarea|select|option)\b[^>]*>/gi, "")
+    .replace(/\s*on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/href\s*=\s*["']?\s*javascript:[^"'>]*["']?/gi, 'href="#"')
     .trim();
 
   // Đảm bảo văn bản được bọc trong các thẻ đoạn văn nếu chỉ là plain text
@@ -124,14 +133,15 @@ export function enforceND30Standards(
     : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
 
   // 2. RULE OVERRIDE: Tiêu ngữ (Dòng 2)
-  const nationalHeader2 = "Độc lập - Tự do - Hạnh phúc" as const;
+  // Văn bản Đảng theo Hướng dẫn số 05-HD/VPTW không có tiêu ngữ Độc lập - Tự do - Hạnh phúc
+  const nationalHeader2 = isParty ? "" : ("Độc lập - Tự do - Hạnh phúc" as const);
 
   // 3. RULE OVERRIDE: Phông chữ & Cỡ chữ bắt buộc (NĐ 30 Điều 8)
   const fontFamily = "Times New Roman" as const;
   const fontSize = 13 as const;
 
   // 4. RULE OVERRIDE: Loại văn bản chuẩn hóa
-  const documentType = (source.documentType || "CÔNG VĂN").toString().trim().toUpperCase();
+  const documentType = (source.documentType || (isParty ? "NGHỊ QUYẾT" : "CÔNG VĂN")).toString().trim().toUpperCase();
 
   // 5. RULE REPAIR: Số và ký hiệu văn bản
   const referenceNumber = normalizeReferenceNumber(source.referenceNumber, documentType);
@@ -139,7 +149,7 @@ export function enforceND30Standards(
   // 6. RULE REPAIR: Địa danh và Ngày tháng năm
   let locationAndDate = (source.locationAndDate || "").toString().trim();
   if (!LOCATION_AND_DATE_REGEX.test(locationAndDate) || locationAndDate.length < 10) {
-    // Nếu AI bịa ngày tháng không đúng định dạng chuẩn NĐ 30, trích xuất địa danh và áp dụng ngày thực tế
+    // Nếu AI bịa ngày tháng không đúng định dạng chuẩn NĐ 30, trích xuất địa danh và áp dụng ngày thực tế chuẩn
     const loc = extractLocation(locationAndDate);
     locationAndDate = formatStandardDate(loc);
   }
