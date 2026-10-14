@@ -1065,11 +1065,12 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      setDoc(prev => ({ ...prev, locationAndDate: formatStandardDate("Hà Nội") }));
-                      setSuccessMsg("Đã cập nhật ngày hiện tại theo chuẩn Phụ lục I NĐ 30!");
+                      const loc = extractLocation(doc.locationAndDate);
+                      setDoc(prev => ({ ...prev, locationAndDate: formatStandardDate(loc || "[Địa danh]") }));
+                      setSuccessMsg(loc ? `Đã cập nhật ngày hiện tại cho "${loc}" theo chuẩn NĐ 30!` : "Đã cập nhật ngày hiện tại theo chuẩn NĐ 30 (vui lòng thay thế [Địa danh] nếu cần)!");
                     }}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition"
-                    title="Chèn ngày hôm nay có số 0 chuẩn NĐ 30"
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                    title="Chèn ngày hôm nay (giữ nguyên địa danh đã nhập hoặc để [Địa danh])"
                   >
                     <MapPin className="w-3 h-3 text-blue-600" /> Ngày hiện tại
                   </button>
@@ -1528,7 +1529,7 @@ export default function App() {
                     Đạt {complianceReport.passedChecks}/{complianceReport.totalChecks} tiêu chí thành phần dữ liệu (NĐ 30 / HD 05).
                   </p>
                   <p className="text-[10px] text-slate-500">
-                    * Lưu ý: Đây là kiểm tra 9 trường thành phần dữ liệu. Thể thức trang in A4, lề trang (20-20-15-20mm), font Times New Roman và định dạng bảng biểu được áp dụng và bảo đảm khi xuất tệp Word (.docx).
+                    * Lưu ý: Đây là kết quả kiểm tra 9 trường thành phần dữ liệu. Quy chuẩn khổ giấy A4, lề chuẩn NĐ 30 (Trên 20mm, Dưới 20mm, Trái 30mm, Phải 15mm), phông chữ Times New Roman và định dạng bảng biểu được cấu hình và kiểm chứng trong bộ test tạo tệp Word (.docx).
                   </p>
                 </div>
                 <div className={`text-xs font-bold px-3 py-2 rounded-lg text-center whitespace-nowrap ml-3 shrink-0 ${

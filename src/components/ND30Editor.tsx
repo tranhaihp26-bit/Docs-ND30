@@ -130,7 +130,7 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
     const year = today.getFullYear();
     const dayStr = day < 10 ? `0${day}` : `${day}`;
     const monthStr = (month === 1 || month === 2) ? `0${month}` : `${month}`;
-    const htmlSnippet = `<p style="text-align: right;"><em>Hà Nội, ngày ${dayStr} tháng ${monthStr} năm ${year}</em></p><p></p>`;
+    const htmlSnippet = `<p style="text-align: right;"><em>[Địa danh], ngày ${dayStr} tháng ${monthStr} năm ${year}</em></p><p></p>`;
     editor.chain().focus().insertContent(htmlSnippet).run();
   };
 

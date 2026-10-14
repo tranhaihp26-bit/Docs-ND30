@@ -18,9 +18,18 @@
 
 import { 
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
-  WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip 
+  WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip, PageOrientation 
 } from "docx";
 import type { DocumentFormatType } from "../shared/schemas/document.schema.ts";
+
+/**
+ * Định nghĩa kích thước khổ giấy A4 chuẩn (210mm x 297mm) theo Phụ lục I Nghị định 30/2020/NĐ-CP
+ */
+export const ND30_PAGE_SIZE = {
+  width: convertMillimetersToTwip(210),   // 210mm = 11906 twips (dxa)
+  height: convertMillimetersToTwip(297),  // 297mm = 16838 twips (dxa)
+  orientation: PageOrientation.PORTRAIT,
+};
 
 /**
  * Định nghĩa kích thước lề trang chuẩn Nghị định 30/2020/NĐ-CP (Phụ lục I Mục I.3)
@@ -371,6 +380,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
       {
         properties: {
           page: {
+            size: ND30_PAGE_SIZE,
             margin: ND30_PAGE_MARGINS,
           },
         },

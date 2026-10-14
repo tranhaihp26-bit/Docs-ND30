@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import mammoth from "mammoth";
+import JSZip from "jszip";
 import { Packer, convertMillimetersToTwip } from "docx";
 import { 
   validateND30Compliance, 
@@ -16,6 +17,7 @@ import {
 } from "../src/server/middleware/compliance.middleware.ts";
 import {
   generateND30DocxDocument,
+  ND30_PAGE_SIZE,
   ND30_PAGE_MARGINS
 } from "../src/utils/docxExport.ts";
 
@@ -221,14 +223,16 @@ async function main() {
   });
 
   // ----------------------------------------------------------------------
-  // 18. Lề trang chuẩn Phụ lục I NĐ 30 & Phép thử tạo DOCX thật
+  // 18. Lề trang & Khổ A4 chuẩn Phụ lục I NĐ 30 & Kiểm chứng OOXML thật
   // ----------------------------------------------------------------------
-  await runTest("TEST-18", "Tạo DOCX thật, kiểm tra lề A4 (20-20-30-15mm), OOXML nhị phân và chữ Việt", async () => {
-    // 1. Kiểm tra cấu hình lề trang theo Phụ lục I NĐ 30: Trên 20mm, Dưới 20mm, Trái 30mm, Phải 15mm
+  await runTest("TEST-18", "Tạo DOCX thật, đọc OOXML xác minh w:pgSz (A4), w:pgMar (20-20-30-15mm) và chữ Việt", async () => {
+    // 1. Kiểm tra cấu hình lề trang và kích thước khổ giấy A4 xuất phát từ hằng số quy chuẩn
     assert.equal(ND30_PAGE_MARGINS.top, convertMillimetersToTwip(20), "Lề trên phải là 20mm");
     assert.equal(ND30_PAGE_MARGINS.bottom, convertMillimetersToTwip(20), "Lề dưới phải là 20mm");
     assert.equal(ND30_PAGE_MARGINS.left, convertMillimetersToTwip(30), "Lề trái phải là 30mm");
     assert.equal(ND30_PAGE_MARGINS.right, convertMillimetersToTwip(15), "Lề phải phải là 15mm");
+    assert.equal(ND30_PAGE_SIZE.width, convertMillimetersToTwip(210), "Chiều rộng A4 phải là 210mm");
+    assert.equal(ND30_PAGE_SIZE.height, convertMillimetersToTwip(297), "Chiều cao A4 phải là 297mm");
 
     // 2. Tạo đối tượng Document thật và xuất ra binary OOXML buffer
     const sampleData: DocumentFormatType = {
@@ -257,7 +261,36 @@ async function main() {
     assert.equal(buffer[0], 0x50, "Header zip byte 0 phải là 0x50 (P)");
     assert.equal(buffer[1], 0x4B, "Header zip byte 1 phải là 0x4B (K)");
 
-    // 3. Đọc lại tệp DOCX thật bằng Mammoth
+    // 3. Đọc trực tiếp word/document.xml từ OOXML ZIP package để xác minh w:pgSz và w:pgMar
+    const zip = await JSZip.loadAsync(buffer);
+    const docXml = await zip.file("word/document.xml")?.async("string");
+    assert.ok(docXml, "Tệp DOCX phải chứa file word/document.xml");
+
+    // Xác minh thẻ <w:pgSz> kích thước trang chuẩn A4
+    const pgSzMatch = docXml.match(/<w:pgSz[^>]*\/>/);
+    assert.ok(pgSzMatch, "OOXML phải chứa thẻ kích thước trang <w:pgSz>");
+    const pgSzTag = pgSzMatch[0];
+    assert.ok(pgSzTag.includes('w:orient="portrait"'), "Định hướng trang phải là portrait (khổ dọc)");
+    const widthMatch = pgSzTag.match(/w:w="(\d+)"/);
+    const heightMatch = pgSzTag.match(/w:h="(\d+)"/);
+    assert.ok(widthMatch && Math.abs(parseInt(widthMatch[1]) - 11906) <= 5, "Chiều rộng trang A4 phải là 210mm (~11906 dxa)");
+    assert.ok(heightMatch && Math.abs(parseInt(heightMatch[1]) - 16838) <= 5, "Chiều cao trang A4 phải là 297mm (~16838 dxa)");
+
+    // Xác minh thẻ <w:pgMar> lề trang chuẩn NĐ 30: Trên 20mm, Dưới 20mm, Trái 30mm, Phải 15mm
+    const pgMarMatch = docXml.match(/<w:pgMar[^>]*\/>/);
+    assert.ok(pgMarMatch, "OOXML phải chứa thẻ cấu hình lề trang <w:pgMar>");
+    const pgMarTag = pgMarMatch[0];
+    const topMatch = pgMarTag.match(/w:top="(\d+)"/);
+    const bottomMatch = pgMarTag.match(/w:bottom="(\d+)"/);
+    const leftMatch = pgMarTag.match(/w:left="(\d+)"/);
+    const rightMatch = pgMarTag.match(/w:right="(\d+)"/);
+
+    assert.ok(topMatch && Math.abs(parseInt(topMatch[1]) - 1134) <= 2, "Lề trên trong OOXML phải là 20mm (~1133-1134 dxa)");
+    assert.ok(bottomMatch && Math.abs(parseInt(bottomMatch[1]) - 1134) <= 2, "Lề dưới trong OOXML phải là 20mm (~1133-1134 dxa)");
+    assert.ok(leftMatch && Math.abs(parseInt(leftMatch[1]) - 1701) <= 2, "Lề trái trong OOXML phải là 30mm (~1700-1701 dxa)");
+    assert.ok(rightMatch && Math.abs(parseInt(rightMatch[1]) - 850) <= 2, "Lề phải trong OOXML phải là 15mm (~850 dxa)");
+
+    // 4. Đọc lại nội dung tệp DOCX thật bằng Mammoth
     const parsed = await mammoth.extractRawText({ buffer });
     const rawText = parsed.value;
 
