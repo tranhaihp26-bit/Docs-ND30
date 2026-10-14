@@ -21,7 +21,7 @@ import {
   WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip, PageOrientation,
   Header, PageNumber, LevelFormat
 } from "docx";
-import type { DocumentFormatType } from "../shared/schemas/document.schema.ts";
+import { type DocumentFormatType, isPlaceholderValue } from "../shared/schemas/document.schema.ts";
 
 /**
  * Interface cho Style Profile của chế độ văn bản (Nghị định 30 vs Hướng dẫn 05)
@@ -466,14 +466,16 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
     ? "ĐẢNG CỘNG SẢN VIỆT NAM"
     : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
 
-  const bodySampleTop = data.bodyHtml ? data.bodyHtml.slice(0, 1000).toUpperCase() : "";
-  const bodySampleBottom = data.bodyHtml ? data.bodyHtml.slice(-1500).toUpperCase() : "";
+  const fullHtmlUpper = data.bodyHtml ? data.bodyHtml.toUpperCase() : "";
 
-  const hasEmbeddedHeader = bodySampleTop.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") || bodySampleTop.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
-  const hasEmbeddedSignature = bodySampleBottom.includes("NƠI NHẬN:") || bodySampleBottom.includes("TM.") || bodySampleBottom.includes("T/M.");
+  const hasEmbeddedHeader = fullHtmlUpper.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") || fullHtmlUpper.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
+  const hasEmbeddedSignature = fullHtmlUpper.includes("NƠI NHẬN:") || fullHtmlUpper.includes("TM.") || fullHtmlUpper.includes("T/M.") || fullHtmlUpper.includes("CHỦ TỊCH") || fullHtmlUpper.includes("GIÁM ĐỐC");
 
-  const shouldRenderHeader = !hasEmbeddedHeader && (Boolean(data.orgHeader2) || Boolean(data.referenceNumber));
-  const shouldRenderSignature = !hasEmbeddedSignature && (Boolean(data.signTitle) || Boolean(data.signName));
+  const isHeaderPlaceholder = (!data.orgHeader2 || isPlaceholderValue(data.orgHeader2)) && (!data.referenceNumber || isPlaceholderValue(data.referenceNumber));
+  const isSignaturePlaceholder = (!data.signTitle || isPlaceholderValue(data.signTitle)) && (!data.signName || isPlaceholderValue(data.signName));
+
+  const shouldRenderHeader = !hasEmbeddedHeader && !isHeaderPlaceholder && (Boolean(data.orgHeader2) || Boolean(data.referenceNumber));
+  const shouldRenderSignature = !hasEmbeddedSignature && !isSignaturePlaceholder && (Boolean(data.signTitle) || Boolean(data.signName));
 
   return new Document({
     styles: {

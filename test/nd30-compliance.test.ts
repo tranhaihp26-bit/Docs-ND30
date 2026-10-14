@@ -15,6 +15,7 @@ import {
   normalizeReferenceNumber, 
   sanitizeBodyHtml 
 } from "../src/server/middleware/compliance.middleware.ts";
+import { fallbackRuleBasedParser } from "../src/server/parser.ts";
 import {
   generateND30DocxDocument,
   getStyleProfile,
@@ -583,7 +584,7 @@ async function main() {
   // ----------------------------------------------------------------------
   // 26. E2E-T01: Nhận diện loại văn bản Kế hoạch trích dẫn Quyết định (E2E-01 / FIX-02)
   // ----------------------------------------------------------------------
-  await runTest("TEST-26", "E2E-T01: Nhận diện đúng KẾ HOẠCH dù thân bài chứa nhiều trích dẫn Quyết định", async () => {
+  await runTest("TEST-26", "E2E-T01: Gọi parser thật nhận diện KẾ HOẠCH từ văn bản chứa trích dẫn Quyết định", async () => {
     const inputKeHoachText = `
 ỦY BAN NHÂN DÂN TỈNH HẢI PHÒNG
 Số: 45/KH-UBND
@@ -600,19 +601,16 @@ Căn cứ Quyết định số 456/QĐ-UBND ngày 20/03/2024 của UBND tỉnh H
 UBND tỉnh ban hành Kế hoạch tổ chức Hội nghị...
     `;
 
-    const parsed = enforceND30Standards({
-      rawText: inputKeHoachText,
-      documentType: "KẾ HOẠCH",
-      subject: "Hội nghị tổng kết an toàn hàng hải"
-    }, "administrative");
+    const rawParsed = fallbackRuleBasedParser(inputKeHoachText, "administrative");
+    const parsed = enforceND30Standards(rawParsed, "administrative");
 
-    assert.strictEqual(parsed.documentType, "KẾ HOẠCH", "Loại văn bản bắt buộc phải là KẾ HOẠCH, không bị nhầm thành QUYẾT ĐỊNH");
+    assert.strictEqual(parsed.documentType, "KẾ HOẠCH", "Parser thật phải nhận diện ra KẾ HOẠCH, không bị nhầm thành QUYẾT ĐỊNH");
   });
 
   // ----------------------------------------------------------------------
   // 27. E2E-T02: Bảo toàn cấu trúc 2 bảng phụ lục 11x3 và 8x3 (E2E-03 / FIX-03)
   // ----------------------------------------------------------------------
-  await runTest("TEST-27", "E2E-T02: Bảo toàn 2 bảng phụ lục (11x3 và 8x3) thành bảng Word thật trong DOCX", async () => {
+  await runTest("TEST-27", "E2E-T02: Bảo toàn chính xác 2 bảng phụ lục (11x3 và 8x3) từ import đến Word XML", async () => {
     let table1Html = "<table><tr><th>STT</th><th>Nội dung công việc</th><th>Đơn vị thực hiện</th></tr>";
     for (let i = 1; i <= 10; i++) {
       table1Html += `<tr><td>${i}</td><td>Nhiệm vụ kiểm tra an toàn ${i}</td><td>Phòng Hàng hải</td></tr>`;
@@ -651,24 +649,47 @@ UBND tỉnh ban hành Kế hoạch tổ chức Hội nghị...
     const docXml = await zip.file("word/document.xml")?.async("string");
 
     assert.ok(docXml, "Phải đọc được word/document.xml");
-    const tableMatches = docXml.match(/<w:tbl\b/g) || [];
-    assert.ok(tableMatches.length >= 2, "Tệp xuất bắt buộc chứa các bảng Word thật cho phụ lục");
+
+    const tblRegex = /<w:tbl\b[\s\S]*?<\/w:tbl>/g;
+    const tables = docXml.match(tblRegex) || [];
+    assert.ok(tables.length >= 2, "Bắt buộc sinh các bảng Word phụ lục");
+
+    const appendixTables = tables.filter(tbl => tbl.includes("Nhiệm vụ kiểm tra an toàn") || tbl.includes("Cá nhân/Tập thể xuất sắc"));
+    assert.strictEqual(appendixTables.length, 2, "Phải chứa chính xác 2 bảng phụ lục trong body");
+
+    const tbl1Rows = appendixTables[0].match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
+    assert.strictEqual(tbl1Rows.length, 11, "Bảng phụ lục 1 phải có đúng 11 hàng (1 tiêu đề + 10 dữ liệu)");
+    const tbl1FirstRowCells = tbl1Rows[0].match(/<w:tc\b[\s\S]*?<\/w:tc>/g) || [];
+    assert.strictEqual(tbl1FirstRowCells.length, 3, "Bảng phụ lục 1 phải có đúng 3 cột");
+
+    const tbl2Rows = appendixTables[1].match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
+    assert.strictEqual(tbl2Rows.length, 8, "Bảng phụ lục 2 phải có đúng 8 hàng (1 tiêu đề + 7 dữ liệu)");
+    const tbl2FirstRowCells = tbl2Rows[0].match(/<w:tc\b[\s\S]*?<\/w:tc>/g) || [];
+    assert.strictEqual(tbl2FirstRowCells.length, 3, "Bảng phụ lục 2 phải có đúng 3 cột");
 
     const textResult = await mammoth.extractRawText({ buffer });
-    assert.ok(textResult.value.includes("Nhiệm vụ kiểm tra an toàn 10"), "Nội dung bảng Phụ lục 1 11x3 không bị rơi vãi");
-    assert.ok(textResult.value.includes("Cá nhân/Tập thể xuất sắc 7"), "Nội dung bảng Phụ lục 2 8x3 không bị rơi vãi");
+    assert.ok(textResult.value.includes("Nhiệm vụ kiểm tra an toàn 10"), "Chính xác ô dữ liệu hàng 10");
+    assert.ok(textResult.value.includes("Bằng khen UBND tỉnh"), "Chính xác ô dữ liệu khen thưởng");
   });
 
   // ----------------------------------------------------------------------
   // 28. E2E-T03: Không lặp khối thể thức đầu trang / chữ ký (E2E-02 / FIX-05)
   // ----------------------------------------------------------------------
-  await runTest("TEST-28", "E2E-T03: Không nhân bản khối Quốc hiệu và chữ ký khi bodyHtml đã có sẵn thể thức hoàn chỉnh", async () => {
-    const completeDocHtml = `
+  await runTest("TEST-28", "E2E-T03: Không nhân bản khối thể thức khi chữ ký đứng trước phụ lục dài 50 hàng", async () => {
+    let longAppendixRows = "<table><tr><th>STT</th><th>Hạng mục</th></tr>";
+    for (let i = 1; i <= 50; i++) {
+      longAppendixRows += `<tr><td>${i}</td><td>Nội dung mục phụ lục kéo dài số ${i} nhằm kiểm tra phát hiện chữ ký ở giữa bài</td></tr>`;
+    }
+    longAppendixRows += "</table>";
+
+    const completeDocHtmlWithSignatureBeforeAppendix = `
       <p style="text-align: center;"><strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br/>Độc lập - Tự do - Hạnh phúc</strong></p>
       <p style="text-align: center;"><strong>KẾ HOẠCH</strong></p>
-      <p>Nội dung kế hoạch chi tiết...</p>
+      <p>Nội dung kế hoạch chi tiết phần thân văn bản...</p>
       <p>TM. ỦY BAN NHÂN DÂN<br/>CHỦ TỊCH<br/>Nguyễn Văn X</p>
       <p>Nơi nhận: Như trên</p>
+      <p><strong>Phụ lục đính kèm kế hoạch:</strong></p>
+      ${longAppendixRows}
     `;
 
     const docData: DocumentFormatType = {
@@ -683,10 +704,10 @@ UBND tỉnh ban hành Kế hoạch tổ chức Hội nghị...
       documentType: "KẾ HOẠCH",
       referenceNumber: "",
       subject: "",
-      bodyHtml: completeDocHtml,
-      signTitle: "",
-      signName: "",
-      recipients: ""
+      bodyHtml: completeDocHtmlWithSignatureBeforeAppendix,
+      signTitle: "CHỦ TỊCH",
+      signName: "Nguyễn Văn X",
+      recipients: "Như trên"
     };
 
     const doc = generateND30DocxDocument(docData);
@@ -694,44 +715,43 @@ UBND tỉnh ban hành Kế hoạch tổ chức Hội nghị...
     const textResult = await mammoth.extractRawText({ buffer });
 
     const nationalMatches = textResult.value.match(/CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM/g) || [];
-    assert.strictEqual(nationalMatches.length, 1, "Quốc hiệu chỉ xuất hiện duy nhất 1 lần, không bị trùng lặp khối đầu trang");
+    assert.strictEqual(nationalMatches.length, 1, "Quốc hiệu xuất hiện đúng 1 lần");
+
+    const tmMatches = textResult.value.match(/TM\. ỦY BAN NHÂN DÂN/g) || [];
+    assert.strictEqual(tmMatches.length, 1, "Chức danh người ký TM. ỦY BAN NHÂN DÂN xuất hiện đúng 1 lần, không bị nhân bản ở cuối bài");
+
+    const recipientMatches = textResult.value.match(/Nơi nhận:/gi) || [];
+    assert.strictEqual(recipientMatches.length, 1, "Nơi nhận xuất hiện đúng 1 lần");
   });
 
   // ----------------------------------------------------------------------
   // 29. E2E-T04: Fallback 503 giữ nguyên HTML tables (FIX-04 / FIX-07-B)
   // ----------------------------------------------------------------------
-  await runTest("TEST-29", "E2E-T04: Rule Fallback bảo toàn cấu trúc HTML và bảng khi dịch vụ AI báo 503", async () => {
-    const rawHtmlInput = "<table><tr><td>1</td><td>Mục test 503</td></tr></table>";
+  await runTest("TEST-29", "E2E-T04: Mô phỏng Gemini HTTP 503 và chạy Rule Fallback bảo toàn bảng HTML", async () => {
+    const rawText = "UBND TỈNH HẢI PHÒNG\nKẾ HOẠCH\nV/v tổ chức hội nghị 2026\nCăn cứ quy định...";
+    const rawHtmlInput = "<table><tr><td>1</td><td>Bảng dữ liệu quan trọng không bị mất khi AI 503</td></tr></table>";
 
-    const rawFallback = {
-      orgHeader1: "",
-      orgHeader2: "[TÊN CƠ QUAN BAN HÀNH]",
-      nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
-      nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
-      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
-      documentType: "KẾ HOẠCH",
-      referenceNumber: "Số: .../KH",
-      subject: "V/v kế hoạch theo quy định",
-      bodyHtml: rawHtmlInput,
-      signTitle: "TM. ỦY BAN NHÂN DÂN\n[CHỨC VỤ]",
-      signName: "[Họ và tên người ký]",
-      recipients: "Như trên;\nLưu: VT, TH."
-    };
+    const fallbackParsed = fallbackRuleBasedParser(rawText, "administrative", rawHtmlInput);
+    const compliant = enforceND30Standards(fallbackParsed, "administrative");
 
-    const compliantFallback = enforceND30Standards(rawFallback, "administrative");
-    assert.ok(compliantFallback.bodyHtml.includes("<table"), "Khi AI gặp 503, Rule Fallback bắt buộc phải giữ nguyên thẻ <table> của tài liệu gốc");
+    assert.ok(compliant.bodyHtml.includes("<table>"), "Bắt buộc bảo toàn thẻ <table>");
+    assert.ok(compliant.bodyHtml.includes("Bảng dữ liệu quan trọng không bị mất khi AI 503"), "Bắt buộc bảo toàn nội dung dữ liệu trong bảng khi Gemini 503");
   });
 
   // ----------------------------------------------------------------------
-  // 30. TEST-AI: Live Gemini API Smoke Test (Default Model gemini-3.8-flash)
+  // TỔNG KẾT KẾT QUẢ KIỂM TRA ĐƠN VỊ & HỆ THỐNG
   // ----------------------------------------------------------------------
-  await runTest("TEST-30", "TEST-AI: Live Gemini API Smoke Test sử dụng model gemini-3.8-flash (Nếu có API Key)", async () => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.log("   [SKIPPED LIVE GEMINI TEST]: Chưa cấu hình GEMINI_API_KEY trong Environment Secrets. Offline tests PASS 100%.");
-      return;
-    }
+  console.log("\n==================================================================");
+  console.log(` KẾT QUẢ KIỂM THỬ ĐƠN VỊ & TIÊU CHUẨN: ${passed}/29 PASS, ${failed} FAIL`);
+  console.log("==================================================================");
 
+  // ----------------------------------------------------------------------
+  // TÁCH BIỆT GEMINI LIVE API SMOKE TEST (KHÔNG CỘNG VÀO SỐ UNIT TEST PASS)
+  // ----------------------------------------------------------------------
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.log("\n[GEMINI LIVE SMOKE TEST]: SKIPPED (Chưa cấu hình GEMINI_API_KEY trong Secrets)");
+  } else {
     try {
       const { GoogleGenAI } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey });
@@ -739,28 +759,24 @@ UBND tỉnh ban hành Kế hoạch tổ chức Hội nghị...
 
       const res = await ai.models.generateContent({
         model: modelName,
-        contents: "Hãy viết 1 câu ngắn: Docs-ND30 tuân thủ thể thức Nghị định 30.",
-        config: { maxOutputTokens: 50 }
+        contents: "Hãy trả lời 1 câu ngắn: Docs-ND30 tuân thủ Nghị định 30.",
+        config: { maxOutputTokens: 30 }
       });
 
-      assert.ok(res.text && res.text.length > 0, "Gemini API trả về văn bản phản hồi thành công");
-      console.log(`   [LIVE GEMINI PASS]: Model=${modelName}, Response=${res.text.trim().slice(0, 60)}...`);
+      if (res.text && res.text.length > 0) {
+        console.log(`\n[GEMINI LIVE SMOKE TEST]: PASS (Model: ${modelName})`);
+      } else {
+        console.log(`\n[GEMINI LIVE SMOKE TEST]: FAIL (Rỗng)`);
+      }
     } catch (err: any) {
-      console.warn("   [LIVE GEMINI NOTICE]:", err.message);
+      console.log(`\n[GEMINI LIVE SMOKE TEST]: UNAVAILABLE (${err.message})`);
     }
-  });
-
-  // ----------------------------------------------------------------------
-  // TỔNG KẾT KẾT QUẢ KIỂM TRA
-  // ----------------------------------------------------------------------
-  console.log("\n==================================================================");
-  console.log(` KẾT QUẢ KIỂM TRA: ${passed}/30 PASS, ${failed} FAIL`);
-  console.log("==================================================================");
+  }
 
   if (failed > 0) {
     process.exit(1);
   } else {
-    console.log(" TẤT CẢ 30 KIỂM TRA THỂ THỨC VÀ E2E ĐỀU ĐẠT CHUẨN XÁC THỰC NGHIỆM THU!");
+    console.log("\nTẤT CẢ 29 BÀI KIỂM THỬ ĐƠN VỊ VÀ ĐỐI CHIẾU THỂ THỨC ĐỀU ĐẠT BẢO TỒN NGUYÊN VẸN!");
   }
 }
 
