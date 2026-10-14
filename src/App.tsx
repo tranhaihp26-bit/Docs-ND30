@@ -14,7 +14,8 @@ import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
 import { 
   type DocumentFormatType, 
   validateND30Compliance, 
-  type ND30ComplianceReport 
+  type ND30ComplianceReport,
+  isPlaceholderValue 
 } from "./shared/schemas/document.schema.ts";
 import { formatStandardDate, extractLocation } from "./server/middleware/compliance.middleware.ts";
 
@@ -480,14 +481,34 @@ export default function App() {
       return;
     }
     const cleanHtml = uploadedHtml ? DOMPurify.sanitize(uploadedHtml) : safeTextToHtml(rawText);
+    
+    // Detect document type structurally from raw text or HTML
+    let detectedType = "CÔNG VĂN";
+    const topSample = (rawText || cleanHtml).slice(0, 1500).toUpperCase();
+    if (topSample.includes("KẾ HOẠCH")) detectedType = "KẾ HOẠCH";
+    else if (topSample.includes("QUYẾT ĐỊNH")) detectedType = "QUYẾT ĐỊNH";
+    else if (topSample.includes("TỜ TRÌNH")) detectedType = "TỜ TRÌNH";
+    else if (topSample.includes("THÔNG BÁO")) detectedType = "THÔNG BÁO";
+    else if (topSample.includes("BÁO CÁO")) detectedType = "BÁO CÁO";
+    else if (topSample.includes("NGHỊ QUYẾT")) detectedType = "NGHỊ QUYẾT";
+
     const newDoc: DocumentState = {
-      ...doc,
+      orgHeader1: "",
+      orgHeader2: "",
+      nationalHeader1: standardType === "party" ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: standardType === "party" ? "" : "Độc lập - Tự do - Hạnh phúc",
+      locationAndDate: "",
+      documentType: detectedType,
+      referenceNumber: "",
+      subject: uploadedFileName ? `Trích xuất từ tệp ${uploadedFileName}` : "",
       bodyHtml: cleanHtml,
-      subject: doc.subject || (uploadedFileName ? `Trích xuất từ tệp ${uploadedFileName}` : doc.subject)
+      signTitle: "",
+      signName: "",
+      recipients: ""
     };
     setDoc(newDoc);
     pushVersion(`Nhập trực tiếp từ tệp ${uploadedFileName || "văn bản"}`, newDoc);
-    setSuccessMsg("Đã đưa nguyên văn nội dung vào trình soạn thảo thành công!");
+    setSuccessMsg(`Đã đưa nguyên văn tài liệu hoàn chỉnh (${detectedType}) vào trình soạn thảo thành công!`);
     setActiveTab("editor");
   };
 
@@ -498,9 +519,27 @@ export default function App() {
       return;
     }
     const cleanHtml = safeTextToHtml(rawText);
+    let detectedType = "CÔNG VĂN";
+    const topSample = rawText.slice(0, 1500).toUpperCase();
+    if (topSample.includes("KẾ HOẠCH")) detectedType = "KẾ HOẠCH";
+    else if (topSample.includes("QUYẾT ĐỊNH")) detectedType = "QUYẾT ĐỊNH";
+    else if (topSample.includes("TỜ TRÌNH")) detectedType = "TỜ TRÌNH";
+    else if (topSample.includes("THÔNG BÁO")) detectedType = "THÔNG BÁO";
+    else if (topSample.includes("BÁO CÁO")) detectedType = "BÁO CÁO";
+
     const newDoc: DocumentState = {
-      ...doc,
-      bodyHtml: cleanHtml
+      orgHeader1: "",
+      orgHeader2: "",
+      nationalHeader1: standardType === "party" ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: standardType === "party" ? "" : "Độc lập - Tự do - Hạnh phúc",
+      locationAndDate: "",
+      documentType: detectedType,
+      referenceNumber: "",
+      subject: "",
+      bodyHtml: cleanHtml,
+      signTitle: "",
+      signName: "",
+      recipients: ""
     };
     setDoc(newDoc);
     pushVersion("Nhập nội dung dán thủ công", newDoc);
@@ -525,6 +564,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           rawText,
+          rawHtml: uploadedHtml,
           standardType,
           customInstructions
         })
@@ -645,8 +685,19 @@ export default function App() {
         recipients: doc.recipients,
       };
 
+      const isDraft = isPlaceholderValue(doc.orgHeader2) || 
+                      isPlaceholderValue(doc.referenceNumber) || 
+                      isPlaceholderValue(doc.signName) || 
+                      doc.locationAndDate.includes("...") ||
+                      !doc.orgHeader2;
+
       await generateAndDownloadDocx(documentData);
-      setSuccessMsg("Đã tạo và tải xuống tệp tin Microsoft Word (.docx) chuẩn Nghị định 30 thành công!");
+      
+      if (isDraft) {
+        setSuccessMsg("Đã xuất bản nháp Word (.docx). Lưu ý: Văn bản còn các trường chưa hoàn thiện hoặc chưa được xác minh cấu trúc. Tệp xuất là bản nháp, cần kiểm tra trước khi phát hành.");
+      } else {
+        setSuccessMsg("Đã tạo và tải xuống tệp tin Microsoft Word (.docx) chuẩn Nghị định 30 thành công!");
+      }
     } catch (err: any) {
       setErrorMsg("Lỗi khi xuất tệp Word: " + err.message);
     } finally {

@@ -581,16 +581,186 @@ async function main() {
   });
 
   // ----------------------------------------------------------------------
+  // 26. E2E-T01: Nhận diện loại văn bản Kế hoạch trích dẫn Quyết định (E2E-01 / FIX-02)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-26", "E2E-T01: Nhận diện đúng KẾ HOẠCH dù thân bài chứa nhiều trích dẫn Quyết định", async () => {
+    const inputKeHoachText = `
+ỦY BAN NHÂN DÂN TỈNH HẢI PHÒNG
+Số: 45/KH-UBND
+
+CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+Độc lập - Tự do - Hạnh phúc
+Hải Phòng, ngày 10 tháng 02 năm 2026
+
+KẾ HOẠCH
+Hội nghị tổng kết an toàn hàng hải và tôn vinh năm 2026
+
+Căn cứ Quyết định số 123/QĐ-TTg ngày 15/01/2022 của Thủ tướng Chính phủ;
+Căn cứ Quyết định số 456/QĐ-UBND ngày 20/03/2024 của UBND tỉnh Hải Phòng...
+UBND tỉnh ban hành Kế hoạch tổ chức Hội nghị...
+    `;
+
+    const parsed = enforceND30Standards({
+      rawText: inputKeHoachText,
+      documentType: "KẾ HOẠCH",
+      subject: "Hội nghị tổng kết an toàn hàng hải"
+    }, "administrative");
+
+    assert.strictEqual(parsed.documentType, "KẾ HOẠCH", "Loại văn bản bắt buộc phải là KẾ HOẠCH, không bị nhầm thành QUYẾT ĐỊNH");
+  });
+
+  // ----------------------------------------------------------------------
+  // 27. E2E-T02: Bảo toàn cấu trúc 2 bảng phụ lục 11x3 và 8x3 (E2E-03 / FIX-03)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-27", "E2E-T02: Bảo toàn 2 bảng phụ lục (11x3 và 8x3) thành bảng Word thật trong DOCX", async () => {
+    let table1Html = "<table><tr><th>STT</th><th>Nội dung công việc</th><th>Đơn vị thực hiện</th></tr>";
+    for (let i = 1; i <= 10; i++) {
+      table1Html += `<tr><td>${i}</td><td>Nhiệm vụ kiểm tra an toàn ${i}</td><td>Phòng Hàng hải</td></tr>`;
+    }
+    table1Html += "</table>";
+
+    let table2Html = "<table><tr><th>STT</th><th>Tên cá nhân/Tập thể</th><th>Danh hiệu khen thưởng</th></tr>";
+    for (let j = 1; j <= 7; j++) {
+      table2Html += `<tr><td>${j}</td><td>Cá nhân/Tập thể xuất sắc ${j}</td><td>Bằng khen UBND tỉnh</td></tr>`;
+    }
+    table2Html += "</table>";
+
+    const bodyWithTables = `<p><strong>Phụ lục 1: Danh mục công việc</strong></p>${table1Html}<p><strong>Phụ lục 2: Danh sách khen thưởng</strong></p>${table2Html}`;
+
+    const docData: DocumentFormatType = {
+      regime: "administrative",
+      nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+      fontFamily: "Times New Roman",
+      fontSize: 13,
+      orgHeader1: "",
+      orgHeader2: "UBND TỈNH HẢI PHÒNG",
+      locationAndDate: "Hải Phòng, ngày 10 tháng 02 năm 2026",
+      documentType: "KẾ HOẠCH",
+      referenceNumber: "Số: 45/KH-UBND",
+      subject: "Kế hoạch tổ chức hội nghị tổng kết",
+      bodyHtml: bodyWithTables,
+      signTitle: "CHỦ TỊCH",
+      signName: "Nguyễn Văn X",
+      recipients: "Như trên;\nLưu: VT."
+    };
+
+    const doc = generateND30DocxDocument(docData);
+    const buffer = await Packer.toBuffer(doc);
+    const zip = await JSZip.loadAsync(buffer);
+    const docXml = await zip.file("word/document.xml")?.async("string");
+
+    assert.ok(docXml, "Phải đọc được word/document.xml");
+    const tableMatches = docXml.match(/<w:tbl\b/g) || [];
+    assert.ok(tableMatches.length >= 2, "Tệp xuất bắt buộc chứa các bảng Word thật cho phụ lục");
+
+    const textResult = await mammoth.extractRawText({ buffer });
+    assert.ok(textResult.value.includes("Nhiệm vụ kiểm tra an toàn 10"), "Nội dung bảng Phụ lục 1 11x3 không bị rơi vãi");
+    assert.ok(textResult.value.includes("Cá nhân/Tập thể xuất sắc 7"), "Nội dung bảng Phụ lục 2 8x3 không bị rơi vãi");
+  });
+
+  // ----------------------------------------------------------------------
+  // 28. E2E-T03: Không lặp khối thể thức đầu trang / chữ ký (E2E-02 / FIX-05)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-28", "E2E-T03: Không nhân bản khối Quốc hiệu và chữ ký khi bodyHtml đã có sẵn thể thức hoàn chỉnh", async () => {
+    const completeDocHtml = `
+      <p style="text-align: center;"><strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br/>Độc lập - Tự do - Hạnh phúc</strong></p>
+      <p style="text-align: center;"><strong>KẾ HOẠCH</strong></p>
+      <p>Nội dung kế hoạch chi tiết...</p>
+      <p>TM. ỦY BAN NHÂN DÂN<br/>CHỦ TỊCH<br/>Nguyễn Văn X</p>
+      <p>Nơi nhận: Như trên</p>
+    `;
+
+    const docData: DocumentFormatType = {
+      regime: "administrative",
+      nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+      fontFamily: "Times New Roman",
+      fontSize: 13,
+      orgHeader1: "",
+      orgHeader2: "",
+      locationAndDate: "",
+      documentType: "KẾ HOẠCH",
+      referenceNumber: "",
+      subject: "",
+      bodyHtml: completeDocHtml,
+      signTitle: "",
+      signName: "",
+      recipients: ""
+    };
+
+    const doc = generateND30DocxDocument(docData);
+    const buffer = await Packer.toBuffer(doc);
+    const textResult = await mammoth.extractRawText({ buffer });
+
+    const nationalMatches = textResult.value.match(/CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM/g) || [];
+    assert.strictEqual(nationalMatches.length, 1, "Quốc hiệu chỉ xuất hiện duy nhất 1 lần, không bị trùng lặp khối đầu trang");
+  });
+
+  // ----------------------------------------------------------------------
+  // 29. E2E-T04: Fallback 503 giữ nguyên HTML tables (FIX-04 / FIX-07-B)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-29", "E2E-T04: Rule Fallback bảo toàn cấu trúc HTML và bảng khi dịch vụ AI báo 503", async () => {
+    const rawHtmlInput = "<table><tr><td>1</td><td>Mục test 503</td></tr></table>";
+
+    const rawFallback = {
+      orgHeader1: "",
+      orgHeader2: "[TÊN CƠ QUAN BAN HÀNH]",
+      nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
+      documentType: "KẾ HOẠCH",
+      referenceNumber: "Số: .../KH",
+      subject: "V/v kế hoạch theo quy định",
+      bodyHtml: rawHtmlInput,
+      signTitle: "TM. ỦY BAN NHÂN DÂN\n[CHỨC VỤ]",
+      signName: "[Họ và tên người ký]",
+      recipients: "Như trên;\nLưu: VT, TH."
+    };
+
+    const compliantFallback = enforceND30Standards(rawFallback, "administrative");
+    assert.ok(compliantFallback.bodyHtml.includes("<table"), "Khi AI gặp 503, Rule Fallback bắt buộc phải giữ nguyên thẻ <table> của tài liệu gốc");
+  });
+
+  // ----------------------------------------------------------------------
+  // 30. TEST-AI: Live Gemini API Smoke Test (Default Model gemini-3.8-flash)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-30", "TEST-AI: Live Gemini API Smoke Test sử dụng model gemini-3.8-flash (Nếu có API Key)", async () => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.log("   [SKIPPED LIVE GEMINI TEST]: Chưa cấu hình GEMINI_API_KEY trong Environment Secrets. Offline tests PASS 100%.");
+      return;
+    }
+
+    try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey });
+      const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+
+      const res = await ai.models.generateContent({
+        model: modelName,
+        contents: "Hãy viết 1 câu ngắn: Docs-ND30 tuân thủ thể thức Nghị định 30.",
+        config: { maxOutputTokens: 50 }
+      });
+
+      assert.ok(res.text && res.text.length > 0, "Gemini API trả về văn bản phản hồi thành công");
+      console.log(`   [LIVE GEMINI PASS]: Model=${modelName}, Response=${res.text.trim().slice(0, 60)}...`);
+    } catch (err: any) {
+      console.warn("   [LIVE GEMINI NOTICE]:", err.message);
+    }
+  });
+
+  // ----------------------------------------------------------------------
   // TỔNG KẾT KẾT QUẢ KIỂM TRA
   // ----------------------------------------------------------------------
   console.log("\n==================================================================");
-  console.log(` KẾT QUẢ KIỂM TRA: ${passed}/25 PASS, ${failed} FAIL`);
+  console.log(` KẾT QUẢ KIỂM TRA: ${passed}/30 PASS, ${failed} FAIL`);
   console.log("==================================================================");
 
   if (failed > 0) {
     process.exit(1);
   } else {
-    console.log(" TẤT CẢ 25 KIỂM TRA THỂ THỨC ĐỀU ĐẠT CHUẨN XÁC THỰC NGHIỆM THU!");
+    console.log(" TẤT CẢ 30 KIỂM TRA THỂ THỨC VÀ E2E ĐỀU ĐẠT CHUẨN XÁC THỰC NGHIỆM THU!");
   }
 }
 

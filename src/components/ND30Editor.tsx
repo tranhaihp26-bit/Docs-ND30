@@ -55,7 +55,6 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
           levels: [1, 2, 3],
         },
       }),
-      Underline,
       TextAlign.configure({
         types: ["heading", "paragraph"],
         alignments: ["left", "center", "right", "justify"],

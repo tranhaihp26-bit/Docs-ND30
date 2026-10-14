@@ -466,6 +466,15 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
     ? "ĐẢNG CỘNG SẢN VIỆT NAM"
     : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
 
+  const bodySampleTop = data.bodyHtml ? data.bodyHtml.slice(0, 1000).toUpperCase() : "";
+  const bodySampleBottom = data.bodyHtml ? data.bodyHtml.slice(-1500).toUpperCase() : "";
+
+  const hasEmbeddedHeader = bodySampleTop.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") || bodySampleTop.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
+  const hasEmbeddedSignature = bodySampleBottom.includes("NƠI NHẬN:") || bodySampleBottom.includes("TM.") || bodySampleBottom.includes("T/M.");
+
+  const shouldRenderHeader = !hasEmbeddedHeader && (Boolean(data.orgHeader2) || Boolean(data.referenceNumber));
+  const shouldRenderSignature = !hasEmbeddedSignature && (Boolean(data.signTitle) || Boolean(data.signName));
+
   return new Document({
     styles: {
       default: {
@@ -534,176 +543,177 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
           // ==========================================
           // 1. HEADER KHỐI ĐẦU TRANG (BẢNG ẨN 2 CỘT)
           // ==========================================
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              left: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              right: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
-            },
-            rows: [
-              new TableRow({
-                children: [
-                  // Cột trái: Tên cơ quan chủ quản, Tên cơ quan ban hành, Số ký hiệu
-                  new TableCell({
-                    width: { size: 45, type: WidthType.PERCENTAGE },
-                    borders: INVISIBLE_CELL_BORDER,
-                    children: [
-                      ...(data.orgHeader1 ? [
+          ...(shouldRenderHeader ? [
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: {
+                top: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                left: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                right: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    // Cột trái: Tên cơ quan chủ quản, Tên cơ quan ban hành, Số ký hiệu
+                    new TableCell({
+                      width: { size: 45, type: WidthType.PERCENTAGE },
+                      borders: INVISIBLE_CELL_BORDER,
+                      children: [
+                        ...(data.orgHeader1 ? [
+                          new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { line: 240, after: 20 },
+                            children: [
+                              new TextRun({
+                                text: data.orgHeader1.toUpperCase(),
+                                font: "Times New Roman",
+                                size: profile.orgHeader1FontSize * 2, // 12pt (24 half-pt)
+                              }),
+                            ],
+                          }),
+                        ] : []),
                         new Paragraph({
                           alignment: AlignmentType.CENTER,
                           spacing: { line: 240, after: 20 },
                           children: [
                             new TextRun({
-                              text: data.orgHeader1.toUpperCase(),
+                              text: (data.orgHeader2 || "").toUpperCase(),
                               font: "Times New Roman",
-                              size: profile.orgHeader1FontSize * 2, // 12pt (24 half-pt)
-                            }),
-                          ],
-                        }),
-                      ] : []),
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { line: 240, after: 20 },
-                        children: [
-                          new TextRun({
-                            text: data.orgHeader2.toUpperCase(),
-                            font: "Times New Roman",
-                            size: profile.orgHeader2FontSize * 2, // 13pt (26 half-pt)
-                            bold: true,
-                          }),
-                        ],
-                      }),
-                      // Vạch kẻ nét liền dưới tên cơ quan ban hành
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { line: 160, after: 60 },
-                        children: [
-                          new TextRun({
-                            text: "----------------",
-                            font: "Times New Roman",
-                            size: 20,
-                          }),
-                        ],
-                      }),
-                      // Số, ký hiệu văn bản (cỡ 13, thường, đứng)
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { line: 240, after: 60 },
-                        children: [
-                          new TextRun({
-                            text: data.referenceNumber,
-                            font: "Times New Roman",
-                            size: profile.bodyFontSize * 2,
-                          }),
-                        ],
-                      }),
-                    ],
-                  }),
-
-                  // Cột phải: Quốc hiệu, Tiêu ngữ, Địa danh & Ngày tháng năm
-                  new TableCell({
-                    width: { size: 55, type: WidthType.PERCENTAGE },
-                    borders: INVISIBLE_CELL_BORDER,
-                    children: [
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { line: 240, after: 20 },
-                        children: [
-                          new TextRun({
-                            text: nationalHeader1Text,
-                            font: "Times New Roman",
-                            size: profile.nationalHeader1FontSize * 2,
-                            bold: true,
-                          }),
-                        ],
-                      }),
-                      ...(!isParty && data.nationalHeader2 ? [
-                        new Paragraph({
-                          alignment: AlignmentType.CENTER,
-                          spacing: { line: 240, after: 20 },
-                          children: [
-                            new TextRun({
-                              text: data.nationalHeader2,
-                              font: "Times New Roman",
-                              size: profile.nationalHeader2FontSize * 2,
+                              size: profile.orgHeader2FontSize * 2, // 13pt (26 half-pt)
                               bold: true,
                             }),
                           ],
                         }),
-                        // Vạch kẻ nét liền dưới tiêu ngữ
+                        // Vạch kẻ nét liền dưới tên cơ quan ban hành
                         new Paragraph({
                           alignment: AlignmentType.CENTER,
                           spacing: { line: 160, after: 60 },
                           children: [
                             new TextRun({
-                              text: "----------------------",
+                              text: "----------------",
                               font: "Times New Roman",
                               size: 20,
                             }),
                           ],
                         }),
-                      ] : []),
-                      // Địa danh và ngày, tháng, năm ban hành
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { line: 240, after: 60 },
-                        children: [
-                          new TextRun({
-                            text: data.locationAndDate,
-                            font: "Times New Roman",
-                            size: profile.bodyFontSize * 2,
-                            italics: true,
+                        // Số, ký hiệu văn bản (cỡ 13, thường, đứng)
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          spacing: { line: 240, after: 60 },
+                          children: [
+                            new TextRun({
+                              text: data.referenceNumber,
+                              font: "Times New Roman",
+                              size: profile.bodyFontSize * 2,
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+
+                    // Cột phải: Quốc hiệu, Tiêu ngữ, Địa danh & Ngày tháng năm
+                    new TableCell({
+                      width: { size: 55, type: WidthType.PERCENTAGE },
+                      borders: INVISIBLE_CELL_BORDER,
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          spacing: { line: 240, after: 20 },
+                          children: [
+                            new TextRun({
+                              text: nationalHeader1Text,
+                              font: "Times New Roman",
+                              size: profile.nationalHeader1FontSize * 2,
+                              bold: true,
+                            }),
+                          ],
+                        }),
+                        ...(!isParty && data.nationalHeader2 ? [
+                          new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { line: 240, after: 20 },
+                            children: [
+                              new TextRun({
+                                text: data.nationalHeader2,
+                                font: "Times New Roman",
+                                size: profile.nationalHeader2FontSize * 2,
+                                bold: true,
+                              }),
+                            ],
                           }),
-                        ],
-                      }),
-                    ],
-                  }),
-                ],
-              }),
-            ],
-          }),
+                          // Vạch kẻ nét liền dưới tiêu ngữ
+                          new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { line: 160, after: 60 },
+                            children: [
+                              new TextRun({
+                                text: "----------------------",
+                                font: "Times New Roman",
+                                size: 20,
+                              }),
+                            ],
+                          }),
+                        ] : []),
+                        // Địa danh và ngày, tháng, năm ban hành
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          spacing: { line: 240, after: 60 },
+                          children: [
+                            new TextRun({
+                              text: data.locationAndDate,
+                              font: "Times New Roman",
+                              size: profile.bodyFontSize * 2,
+                              italics: true,
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            new Paragraph({ text: "", spacing: { after: 120 } }),
+          ] : []),
 
-          // Khoảng cách trống
-          new Paragraph({ text: "", spacing: { after: 120 } }),
+          // ==========================================
+          // 2. TÊN LOẠI VĂN BẢN & TRÍCH YẾU (NẾU BẢO TRÌ BÊN NGOÀI)
+          // ==========================================
+          ...(shouldRenderHeader && data.documentType ? [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              spacing: { before: 120, after: 60, line: 276 },
+              children: [
+                new TextRun({
+                  text: data.documentType.toUpperCase(),
+                  font: "Times New Roman",
+                  size: profile.documentTypeFontSize * 2,
+                  bold: true,
+                }),
+              ],
+            }),
+          ] : []),
 
-          // ==========================================
-          // 2. TÊN LOẠI VĂN BẢN (IN HOA, ĐỨNG, ĐẬM, CHÍNH GIỮA)
-          // ==========================================
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            keepNext: true,
-            spacing: { before: 120, after: 60, line: 276 },
-            children: [
-              new TextRun({
-                text: data.documentType.toUpperCase(),
-                font: "Times New Roman",
-                size: profile.documentTypeFontSize * 2, // 14pt (28) vs 15pt (30)
-                bold: true,
-              }),
-            ],
-          }),
-
-          // ==========================================
-          // 3. TRÍCH YẾU NỘI DUNG VĂN BẢN (ĐẬM/NGHIÊNG)
-          // ==========================================
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            keepNext: true,
-            spacing: { before: 60, after: 180, line: 276 },
-            children: [
-              new TextRun({
-                text: data.subject,
-                font: "Times New Roman",
-                size: profile.bodyFontSize * 2,
-                bold: true,
-                italics: true,
-              }),
-            ],
-          }),
+          ...(shouldRenderHeader && data.subject ? [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              spacing: { before: 60, after: 180, line: 276 },
+              children: [
+                new TextRun({
+                  text: data.subject,
+                  font: "Times New Roman",
+                  size: profile.bodyFontSize * 2,
+                  bold: true,
+                  italics: true,
+                }),
+              ],
+            }),
+          ] : []),
 
           // ==========================================
           // 4. TOÀN BỘ NỘI DUNG VĂN BẢN (TỪ TIPTAP HTML)
@@ -716,113 +726,115 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
           // ==========================================
           // 5. KHỐI CHỮ KÝ & NƠI NHẬN (BẢNG ẨN 2 CỘT)
           // ==========================================
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              left: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              right: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
-              insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
-            },
-            rows: [
-              new TableRow({
-                children: [
-                  // Cột trái: Nơi nhận (cỡ 12pt, nghiêng, đậm; các dòng con cỡ 11pt, thường)
-                  new TableCell({
-                    width: { size: 50, type: WidthType.PERCENTAGE },
-                    borders: INVISIBLE_CELL_BORDER,
-                    children: [
-                      new Paragraph({
-                        spacing: { line: 240, after: 40 },
-                        children: [
-                          new TextRun({
-                            text: "Nơi nhận:",
-                            font: "Times New Roman",
-                            size: 24, // 12pt
-                            bold: true,
-                            italics: true,
-                          }),
-                        ],
-                      }),
-                      ...data.recipients
-                        .split("\n")
-                        .map(line => line.trim())
-                        .filter(Boolean)
-                        .map(line => 
-                          new Paragraph({
-                            spacing: { line: 220, before: 20, after: 20 },
-                            children: [
-                              new TextRun({
-                                text: line.startsWith("-") ? line : `- ${line}`,
-                                font: "Times New Roman",
-                                size: 22, // 11pt
-                              }),
-                            ],
-                          })
-                        ),
-                    ],
-                  }),
+          ...(shouldRenderSignature ? [
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: {
+                top: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                left: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                right: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    // Cột trái: Nơi nhận (cỡ 12pt, nghiêng, đậm; các dòng con cỡ 11pt, thường)
+                    new TableCell({
+                      width: { size: 50, type: WidthType.PERCENTAGE },
+                      borders: INVISIBLE_CELL_BORDER,
+                      children: [
+                        new Paragraph({
+                          spacing: { line: 240, after: 40 },
+                          children: [
+                            new TextRun({
+                              text: "Nơi nhận:",
+                              font: "Times New Roman",
+                              size: 24, // 12pt
+                              bold: true,
+                              italics: true,
+                            }),
+                          ],
+                        }),
+                        ...(data.recipients || "Như trên;\nLưu: VT.")
+                          .split("\n")
+                          .map(line => line.trim())
+                          .filter(Boolean)
+                          .map(line => 
+                            new Paragraph({
+                              spacing: { line: 220, before: 20, after: 20 },
+                              children: [
+                                new TextRun({
+                                  text: line.startsWith("-") ? line : `- ${line}`,
+                                  font: "Times New Roman",
+                                  size: 22, // 11pt
+                                }),
+                              ],
+                            })
+                          ),
+                      ],
+                    }),
 
-                  // Cột phải: Chức vụ, chữ ký, họ và tên
-                  new TableCell({
-                    width: { size: 50, type: WidthType.PERCENTAGE },
-                    borders: INVISIBLE_CELL_BORDER,
-                    children: [
-                      // Chức vụ (in hoa, đứng, đậm, cỡ 13-14pt)
-                      ...data.signTitle
-                        .split("\n")
-                        .map(line => line.trim())
-                        .filter(Boolean)
-                        .map(line =>
-                          new Paragraph({
-                            alignment: AlignmentType.CENTER,
-                            spacing: { line: 240, after: 20 },
-                            children: [
-                              new TextRun({
-                                text: line.toUpperCase(),
-                                font: "Times New Roman",
-                                size: profile.signTitleFontSize * 2,
-                                bold: true,
-                              }),
-                            ],
-                          })
-                        ),
-                      // Lời ghi chú "(Ký, đóng dấu)"
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { line: 240, after: 40 },
-                        children: [
-                          new TextRun({
-                            text: "(Ký, đóng dấu)",
-                            font: "Times New Roman",
-                            size: 20, // 10pt
-                            italics: true,
-                          }),
-                        ],
-                      }),
-                      // Khoảng trống ký tên
-                      new Paragraph({ text: "", spacing: { before: 240, after: 360 } }),
-                      // Họ và tên người ký (chữ thường, đứng, đậm, cỡ 13-14pt)
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { line: 240, before: 120 },
-                        children: [
-                          new TextRun({
-                            text: data.signName,
-                            font: "Times New Roman",
-                            size: profile.signNameFontSize * 2,
-                            bold: true,
-                          }),
-                        ],
-                      }),
-                    ],
-                  }),
-                ],
-              }),
-            ],
-          }),
+                    // Cột phải: Chức vụ, chữ ký, họ và tên
+                    new TableCell({
+                      width: { size: 50, type: WidthType.PERCENTAGE },
+                      borders: INVISIBLE_CELL_BORDER,
+                      children: [
+                        // Chức vụ (in hoa, đứng, đậm, cỡ 13-14pt)
+                        ...(data.signTitle || "[CHỨC VỤ]")
+                          .split("\n")
+                          .map(line => line.trim())
+                          .filter(Boolean)
+                          .map(line =>
+                            new Paragraph({
+                              alignment: AlignmentType.CENTER,
+                              spacing: { line: 240, after: 20 },
+                              children: [
+                                new TextRun({
+                                  text: line.toUpperCase(),
+                                  font: "Times New Roman",
+                                  size: profile.signTitleFontSize * 2,
+                                  bold: true,
+                                }),
+                              ],
+                            })
+                          ),
+                        // Lời ghi chú "(Ký, đóng dấu)"
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          spacing: { line: 240, after: 40 },
+                          children: [
+                            new TextRun({
+                              text: "(Ký, đóng dấu)",
+                              font: "Times New Roman",
+                              size: 20, // 10pt
+                              italics: true,
+                            }),
+                          ],
+                        }),
+                        // Khoảng trống ký tên
+                        new Paragraph({ text: "", spacing: { before: 240, after: 360 } }),
+                        // Họ và tên người ký (chữ thường, đứng, đậm, cỡ 13-14pt)
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          spacing: { line: 240, before: 120 },
+                          children: [
+                            new TextRun({
+                              text: data.signName || "[Họ và tên người ký]",
+                              font: "Times New Roman",
+                              size: profile.signNameFontSize * 2,
+                              bold: true,
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ] : []),
         ],
       },
     ],
