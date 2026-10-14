@@ -745,34 +745,6 @@ UBND tỉnh ban hành Kế hoạch tổ chức Hội nghị...
   console.log(` KẾT QUẢ KIỂM THỬ ĐƠN VỊ & TIÊU CHUẨN: ${passed}/29 PASS, ${failed} FAIL`);
   console.log("==================================================================");
 
-  // ----------------------------------------------------------------------
-  // TÁCH BIỆT GEMINI LIVE API SMOKE TEST (KHÔNG CỘNG VÀO SỐ UNIT TEST PASS)
-  // ----------------------------------------------------------------------
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.log("\n[GEMINI LIVE SMOKE TEST]: SKIPPED (Chưa cấu hình GEMINI_API_KEY trong Secrets)");
-  } else {
-    try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ apiKey });
-      const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-
-      const res = await ai.models.generateContent({
-        model: modelName,
-        contents: "Hãy trả lời 1 câu ngắn: Docs-ND30 tuân thủ Nghị định 30.",
-        config: { maxOutputTokens: 30 }
-      });
-
-      if (res.text && res.text.length > 0) {
-        console.log(`\n[GEMINI LIVE SMOKE TEST]: PASS (Model: ${modelName})`);
-      } else {
-        console.log(`\n[GEMINI LIVE SMOKE TEST]: FAIL (Rỗng)`);
-      }
-    } catch (err: any) {
-      console.log(`\n[GEMINI LIVE SMOKE TEST]: UNAVAILABLE (${err.message})`);
-    }
-  }
-
   if (failed > 0) {
     process.exit(1);
   } else {

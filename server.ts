@@ -30,18 +30,25 @@ const ai = new GoogleGenAI({
 });
 
 const PREFERRED_LITE_MODELS = [
-  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
-  "gemini-3.5-flash-lite"
+  "gemini-2.5-flash-lite"
 ];
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
-async function generateContentWithModelFallback(params: { contents: any; config?: any }) {
-  const modelsToTry = process.env.GEMINI_MODEL 
-    ? [process.env.GEMINI_MODEL, ...PREFERRED_LITE_MODELS]
-    : PREFERRED_LITE_MODELS;
+const failedModelsSet = new Set<string>();
 
-  const uniqueModels = Array.from(new Set(modelsToTry));
+async function generateContentWithModelFallback(params: { contents: any; config?: any }) {
+  const defaultModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+  const modelsToTry = [defaultModel, ...PREFERRED_LITE_MODELS];
+
+  const uniqueModels = Array.from(new Set(modelsToTry)).filter(m => !failedModelsSet.has(m));
+  
+  if (uniqueModels.length === 0) {
+    console.warn("[GEMINI UNAVAILABLE] Tất cả các model AI thử nghiệm đều trả về 404/không khả dụng.");
+    throw new Error("GEMINI UNAVAILABLE");
+  }
+
   let lastError: any = null;
 
   for (const modelId of uniqueModels) {
@@ -62,16 +69,20 @@ async function generateContentWithModelFallback(params: { contents: any; config?
       return { response, activeModel: modelId, durationMs };
     } catch (error: any) {
       const durationMs = Date.now() - startTime;
-      const statusCode = error.status || error.statusCode || (String(error.message || '').includes("503") ? 503 : "ERROR");
+      const msg = String(error.message || '');
+      const statusCode = error.status || error.statusCode || (msg.includes("503") ? 503 : msg.includes("404") ? 404 : "ERROR");
       
-      if (statusCode === 503 || String(error.message || '').includes("503") || String(error.message || '').includes("UNAVAILABLE")) {
+      if (statusCode === 404 || msg.includes("404") || msg.includes("NOT_FOUND")) {
+        console.warn(`[GEMINI 404] model="${modelId}" status=404 duration=${durationMs}ms`);
+        failedModelsSet.add(modelId);
+      } else if (statusCode === 503 || msg.includes("503") || msg.includes("UNAVAILABLE")) {
         console.warn(`[GEMINI UNAVAILABLE] model="${modelId}" status=503 duration=${durationMs}ms`);
       } else {
-        console.warn(`[GEMINI FAIL] model="${modelId}" status=${statusCode} duration=${durationMs}ms message="${error.message?.slice(0, 100)}"`);
+        console.warn(`[GEMINI FAIL] model="${modelId}" status=${statusCode} duration=${durationMs}ms message="${msg.slice(0, 100)}"`);
       }
 
       lastError = error;
-      if (statusCode === 404 || statusCode === 503 || String(error.message || '').includes("404") || String(error.message || '').includes("503")) {
+      if (statusCode === 404 || statusCode === 503 || msg.includes("404") || msg.includes("503")) {
         continue;
       }
       break;

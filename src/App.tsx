@@ -887,7 +887,7 @@ export default function App() {
       <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* Left Column: Work Area Tabs */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className={activeTab === "preview" ? "lg:col-span-3 space-y-6" : "lg:col-span-2 space-y-6"}>
 
           {/* ========================================================
               TAB 1: KHỞI TẠO & NHẬP LIỆU (P0-01)
@@ -1356,40 +1356,17 @@ export default function App() {
              ======================================================== */}
           {activeTab === "preview" && (
             <div className="space-y-4">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-                <div>
-                  <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                    <span>Xem trước trang A4 chuẩn Nghị định 30 & Hướng dẫn 05</span>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
-                      Lề chuẩn: Trên 20, Dưới 20, Trái 30, Phải 15mm
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Phông chữ: Times New Roman · Cỡ chữ 13pt · Bảng 2 cột ẩn viền cho Header và Khối chữ ký.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button 
-                    onClick={() => setActiveTab("editor")} 
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-xl font-semibold border border-slate-300 flex items-center gap-1.5"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" /> Quay lại Soạn thảo
-                  </button>
-                  <button 
-                    onClick={handlePrint} 
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-xl font-semibold border border-slate-300 flex items-center gap-1.5"
-                  >
-                    <Printer className="w-3.5 h-3.5" /> In trang
-                  </button>
-                  <button 
-                    onClick={exportToDocx} 
-                    disabled={isExportingDocx}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-                  >
-                    <Download className="w-3.5 h-3.5" /> {isExportingDocx ? "Đang tạo Word..." : "Tải Word (.docx)"}
-                  </button>
-                </div>
-              </div>
+              <A4DocumentPreview
+                doc={doc}
+                standardType={standardType}
+                previewRef={previewRef}
+                mode="full"
+                onExportDocx={exportToDocx}
+                onExportPdf={exportToPdf}
+                onPrint={handlePrint}
+                isExportingDocx={isExportingDocx}
+                isExportingPdf={isExportingPdf}
+              />
             </div>
           )}
 
@@ -1438,18 +1415,22 @@ export default function App() {
         {/* ========================================================
             Right Column: Live A4 Visual Preview Page (P0-03, P0-06)
            ======================================================== */}
-        <div className="lg:col-span-1">
-          <A4DocumentPreview
-            doc={doc}
-            standardType={standardType}
-            previewRef={previewRef}
-            onExportDocx={exportToDocx}
-            onExportPdf={exportToPdf}
-            onPrint={handlePrint}
-            isExportingDocx={isExportingDocx}
-            isExportingPdf={isExportingPdf}
-          />
-        </div>
+        {activeTab !== "preview" && (
+          <div className="lg:col-span-1">
+            <A4DocumentPreview
+              doc={doc}
+              standardType={standardType}
+              previewRef={previewRef}
+              mode="thumbnail"
+              onSwitchToFullPreview={() => setActiveTab("preview")}
+              onExportDocx={exportToDocx}
+              onExportPdf={exportToPdf}
+              onPrint={handlePrint}
+              isExportingDocx={isExportingDocx}
+              isExportingPdf={isExportingPdf}
+            />
+          </div>
+        )}
 
       </main>
 

@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
+import { renderAsync } from "docx-preview";
+import { Packer } from "docx";
 import { 
   FileText, ZoomIn, ZoomOut, Maximize2, Minimize2, 
-  Printer, Download, FileCode, CheckCircle2, Layers
+  Printer, Download, FileCode, CheckCircle2, Layers,
+  RefreshCw, Eye, Sparkles, LayoutGrid
 } from "lucide-react";
-import { detectEmbeddedSignature } from "../utils/docxExport";
+import { detectEmbeddedSignature, generateND30DocxDocument } from "../utils/docxExport";
+import { enforceND30Standards } from "../server/middleware/compliance.middleware";
 
 export interface DocumentData {
   orgHeader1?: string;
@@ -26,9 +30,11 @@ export interface A4DocumentPreviewProps {
   doc: DocumentData;
   standardType: "administrative" | "party" | "state";
   previewRef: React.RefObject<HTMLDivElement | null>;
+  mode?: "thumbnail" | "full";
   onExportDocx?: () => void;
   onExportPdf?: () => void;
   onPrint?: () => void;
+  onSwitchToFullPreview?: () => void;
   isExportingDocx?: boolean;
   isExportingPdf?: boolean;
 }
@@ -37,23 +43,31 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
   doc,
   standardType,
   previewRef,
+  mode = "full",
   onExportDocx,
   onExportPdf,
   onPrint,
+  onSwitchToFullPreview,
   isExportingDocx = false,
   isExportingPdf = false,
 }) => {
   const isParty = standardType === "party";
   const [zoomLevel, setZoomLevel] = useState<number | "auto">("auto");
-  const [computedScale, setComputedScale] = useState<number>(0.52);
+  const [computedScale, setComputedScale] = useState<number>(mode === "thumbnail" ? 0.48 : 0.85);
+  const [renderEngine, setRenderEngine] = useState<"docx_real" | "css_canvas">("docx_real");
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [modalZoom, setModalZoom] = useState<number>(0.85);
+  const [modalZoom, setModalZoom] = useState<number>(0.9);
   const [pageCount, setPageCount] = useState<number>(1);
+  const [isRenderingDocx, setIsRenderingDocx] = useState<boolean>(false);
+  const [docxRenderError, setDocxRenderError] = useState<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const modalContainerRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const docxContainerRef = useRef<HTMLDivElement>(null);
+  const modalDocxContainerRef = useRef<HTMLDivElement>(null);
 
-  // A4 sheet dimensions in pixels at 96 DPI: 210mm ~ 794px, 297mm ~ 1123px
+  // A4 sheet dimensions in CSS pixels at 96 DPI: 210mm ~ 794px, 297mm ~ 1123px
   const A4_WIDTH_PX = 794;
   const A4_HEIGHT_PX = 1123;
 
@@ -65,14 +79,19 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
     topHtmlUpper.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
   const hasEmbeddedSignature = detectEmbeddedSignature(bodyHtml);
 
-  // Calculate responsive scale for sidebar container
+  // 1. Calculate responsive scale based on container width
   useEffect(() => {
     const calculateScale = () => {
       if (!containerRef.current) return;
-      const containerWidth = containerRef.current.clientWidth - 24; // padding offset
+      const containerWidth = containerRef.current.clientWidth - 32; // padding offset
       if (zoomLevel === "auto") {
-        const autoScale = Math.min(1, Math.max(0.35, containerWidth / A4_WIDTH_PX));
-        setComputedScale(autoScale);
+        if (mode === "thumbnail") {
+          const autoScale = Math.min(0.6, Math.max(0.35, containerWidth / A4_WIDTH_PX));
+          setComputedScale(autoScale);
+        } else {
+          const autoScale = Math.min(1.1, Math.max(0.45, containerWidth / (A4_WIDTH_PX + 40)));
+          setComputedScale(autoScale);
+        }
       } else {
         setComputedScale(zoomLevel);
       }
@@ -83,10 +102,94 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
     if (containerRef.current) resizeObserver.observe(containerRef.current);
 
     return () => resizeObserver.disconnect();
-  }, [zoomLevel]);
+  }, [zoomLevel, mode]);
 
-  // Calculate page count based on content height inside A4 sheet
+  // 2. Debounced DOCX Real Engine Rendering via docx-preview
   useEffect(() => {
+    let isMounted = true;
+    const timeoutId = setTimeout(async () => {
+      if (renderEngine !== "docx_real") return;
+      const targetElement = docxContainerRef.current;
+      if (!targetElement) return;
+
+      try {
+        setIsRenderingDocx(true);
+        const normalizedDoc = enforceND30Standards(doc, isParty ? "party" : "administrative");
+        const docxDoc = generateND30DocxDocument(normalizedDoc);
+        const blob = await Packer.toBlob(docxDoc);
+
+        if (!isMounted || !docxContainerRef.current) return;
+
+        docxContainerRef.current.innerHTML = "";
+        await renderAsync(blob, docxContainerRef.current, undefined, {
+          className: "docx",
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: true,
+          experimental: true,
+          trimXmlDeclaration: true,
+          debug: false,
+        });
+
+        // Count rendered pages
+        const pages = docxContainerRef.current.querySelectorAll("section.docx");
+        if (pages.length > 0 && isMounted) {
+          setPageCount(pages.length);
+        }
+
+        setDocxRenderError(false);
+      } catch (err) {
+        console.warn("docx-preview rendering error, falling back to CSS canvas:", err);
+        if (isMounted) setDocxRenderError(true);
+      } finally {
+        if (isMounted) setIsRenderingDocx(false);
+      }
+    }, 300);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [doc, standardType, isParty, renderEngine]);
+
+  // 3. Render Modal DOCX Real Engine when Modal is Open
+  useEffect(() => {
+    if (!isModalOpen || renderEngine !== "docx_real" || !modalDocxContainerRef.current) return;
+
+    let isMounted = true;
+    const renderModalDocx = async () => {
+      try {
+        const normalizedDoc = enforceND30Standards(doc, isParty ? "party" : "administrative");
+        const docxDoc = generateND30DocxDocument(normalizedDoc);
+        const blob = await Packer.toBlob(docxDoc);
+        if (!isMounted || !modalDocxContainerRef.current) return;
+
+        modalDocxContainerRef.current.innerHTML = "";
+        await renderAsync(blob, modalDocxContainerRef.current, undefined, {
+          className: "docx",
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: true,
+          experimental: true,
+          trimXmlDeclaration: true,
+          debug: false,
+        });
+      } catch (err) {
+        console.warn("Modal docx-preview render error:", err);
+      }
+    };
+
+    renderModalDocx();
+    return () => { isMounted = false; };
+  }, [isModalOpen, doc, standardType, isParty, renderEngine]);
+
+  // 4. Estimate page count for CSS Canvas fallback
+  useEffect(() => {
+    if (renderEngine === "docx_real" && !docxRenderError) return;
     const calculatePages = () => {
       const targetElement = previewRef.current || sheetRef.current;
       if (targetElement) {
@@ -97,25 +200,26 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
     };
 
     calculatePages();
-    const timeout = setTimeout(calculatePages, 300);
+    const timeout = setTimeout(calculatePages, 200);
     return () => clearTimeout(timeout);
-  }, [doc, bodyHtml]);
+  }, [doc, bodyHtml, renderEngine, docxRenderError]);
 
   const handleZoomIn = () => {
-    if (zoomLevel === "auto") setZoomLevel(0.65);
-    else setZoomLevel((prev) => Math.min(1.5, (prev as number) + 0.1));
+    if (zoomLevel === "auto") setZoomLevel(mode === "thumbnail" ? 0.65 : 1.0);
+    else setZoomLevel((prev) => Math.min(1.8, (prev as number) + 0.15));
   };
 
   const handleZoomOut = () => {
-    if (zoomLevel === "auto") setZoomLevel(0.45);
-    else setZoomLevel((prev) => Math.max(0.3, (prev as number) - 0.1));
+    if (zoomLevel === "auto") setZoomLevel(mode === "thumbnail" ? 0.35 : 0.6);
+    else setZoomLevel((prev) => Math.max(0.3, (prev as number) - 0.15));
   };
 
+  // High-fidelity CSS A4 Paper Sheet Renderer
   const renderA4SheetContent = (isModal = false) => (
     <div
       id={isModal ? undefined : "printable-document"}
       ref={isModal ? undefined : previewRef}
-      className="bg-white text-slate-900 rounded border border-slate-300 shadow-xl mx-auto selection:bg-blue-100 relative text-left box-border"
+      className="bg-white text-slate-900 rounded-sm border border-slate-300 shadow-2xl mx-auto selection:bg-blue-100 relative text-left box-border"
       style={{
         width: "210mm",
         minHeight: "297mm",
@@ -127,9 +231,10 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
         fontSize: isParty ? "14pt" : "13pt",
         lineHeight: "1.4",
         color: "#000000",
+        boxSizing: "border-box",
       }}
     >
-      {/* 1. Header Block (2 columns) - Only if not embedded in bodyHtml */}
+      {/* 1. Header Block (2 columns) */}
       {!hasEmbeddedHeader && (
         <div className="grid grid-cols-2 text-center mb-6 gap-2 items-start text-black">
           {/* Column 1: Organization Header & Ref Number */}
@@ -201,7 +306,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
         }}
       />
 
-      {/* 5. Signature & Recipients Block - Only if not embedded */}
+      {/* 5. Signature & Recipients Block */}
       {!hasEmbeddedSignature && (
         <div className="mt-8 grid grid-cols-2 gap-4 pt-2 items-start break-inside-avoid">
           {/* Left Column: Recipients */}
@@ -227,37 +332,64 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
   );
 
   return (
-    <div className="sticky top-20 bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
+    <div className={`bg-white border border-slate-200 rounded-2xl shadow-xs space-y-3 ${
+      mode === "thumbnail" ? "p-3.5 sticky top-20" : "p-4 sm:p-5"
+    }`}>
       {/* Top Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+          <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg shrink-0">
             <FileText className="w-4 h-4" />
           </div>
           <div>
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <span>Xem trước A4 (NĐ 30 / HD 05)</span>
+              <span>Xem trước trang A4 (210×297 mm)</span>
             </h3>
             <p className="text-[10px] text-slate-500 font-sans">
-              210 × 297 mm · Tỷ lệ 1:1.414 · Lề 20-15-20-30mm
+              Khổ A4 Portrait · Lề: Trên 20mm, Dưới 20mm, Trái 30mm, Phải 15mm
             </p>
           </div>
         </div>
 
-        {/* Badges */}
-        <div className="flex items-center gap-1 text-[10px]">
-          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium border border-blue-100">
+        {/* Badges & Mode Switchers */}
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold border border-blue-100">
             {isParty ? "HD 05 (14pt)" : "NĐ 30 (13pt)"}
           </span>
           <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium border border-slate-200 flex items-center gap-1">
             <Layers className="w-3 h-3 text-slate-500" />
             {pageCount} trang
           </span>
+
+          {mode === "full" && (
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px] ml-1">
+              <button
+                type="button"
+                onClick={() => setRenderEngine("docx_real")}
+                className={`px-2 py-0.5 rounded font-medium transition ${
+                  renderEngine === "docx_real" ? "bg-white text-blue-700 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
+                }`}
+                title="Sử dụng engine Word DOCX thực tế"
+              >
+                Engine Word Real
+              </button>
+              <button
+                type="button"
+                onClick={() => setRenderEngine("css_canvas")}
+                className={`px-2 py-0.5 rounded font-medium transition ${
+                  renderEngine === "css_canvas" ? "bg-white text-blue-700 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
+                }`}
+                title="Sử dụng A4 Canvas CSS"
+              >
+                Canvas CSS
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Toolbar: Zoom & Expand */}
-      <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-200 text-xs">
+      {/* Toolbar: Zoom, Scale, Fullscreen */}
+      <div className="flex flex-wrap items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-200 text-xs gap-2">
         <div className="flex items-center gap-1">
           <button
             onClick={handleZoomOut}
@@ -270,11 +402,11 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
             onClick={() => setZoomLevel("auto")}
             className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
               zoomLevel === "auto"
-                ? "bg-blue-600 text-white shadow-2xs"
+                ? "bg-blue-600 text-white shadow-2xs font-semibold"
                 : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
             }`}
           >
-            Tự vừa khung ({Math.round(computedScale * 100)}%)
+            Vừa khung ({Math.round(computedScale * 100)}%)
           </button>
           <button
             onClick={handleZoomIn}
@@ -291,48 +423,83 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
             }}
             className="bg-white border border-slate-200 text-[11px] rounded px-1.5 py-0.5 text-slate-700 focus:outline-none"
           >
-            <option value="auto">Auto</option>
+            <option value="auto">Tự động</option>
             <option value="0.4">40%</option>
             <option value="0.5">50%</option>
-            <option value="0.6">60%</option>
             <option value="0.75">75%</option>
-            <option value="1.0">100% (Chuẩn A4)</option>
+            <option value="1.0">100% (A4 chuẩn)</option>
+            <option value="1.25">125%</option>
           </select>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {mode === "thumbnail" && onSwitchToFullPreview && (
+            <button
+              onClick={onSwitchToFullPreview}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-2.5 py-1 rounded-lg text-[11px] transition flex items-center gap-1 shadow-2xs"
+            >
+              <Eye className="w-3.5 h-3.5" /> Xem toàn trang
+            </button>
+          )}
+
           <button
             onClick={() => setIsModalOpen(true)}
             className="bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg font-semibold text-[11px] transition flex items-center gap-1 shadow-2xs"
           >
-            <Maximize2 className="w-3 h-3" /> Mở rộng A4
+            <Maximize2 className="w-3.5 h-3.5" /> Mở rộng A4
           </button>
         </div>
       </div>
 
-      {/* Main Preview Container with Responsive Scaling */}
+      {/* Main Preview Container with Neutral Canvas & Centered A4 Pages */}
       <div
         ref={containerRef}
-        className="bg-slate-200/80 p-3 sm:p-4 rounded-xl border border-slate-300 overflow-x-auto min-h-[500px] flex justify-center items-start relative shadow-inner"
+        className={`bg-slate-200/90 rounded-xl border border-slate-300 overflow-x-auto flex justify-center items-start relative shadow-inner ${
+          mode === "thumbnail" ? "p-3 min-h-[420px]" : "p-4 sm:p-8 min-h-[600px]"
+        }`}
       >
-        <div
-          style={{
-            transform: `scale(${computedScale})`,
-            transformOrigin: "top center",
-            transition: "transform 0.15s ease-out",
-            marginBottom: `${-(A4_HEIGHT_PX * (1 - computedScale))}px`,
-          }}
-        >
-          {renderA4SheetContent(false)}
-        </div>
+        {/* Render Engine 1: DOCX Real Engine (Word .docx rendered via docx-preview) */}
+        {renderEngine === "docx_real" && !docxRenderError ? (
+          <div
+            className="w-full flex justify-center"
+            style={{
+              transform: `scale(${computedScale})`,
+              transformOrigin: "top center",
+              transition: "transform 0.15s ease-out",
+              marginBottom: mode === "thumbnail" ? `-${A4_HEIGHT_PX * 0.45}px` : "20px",
+            }}
+          >
+            {isRenderingDocx && (
+              <div className="absolute inset-0 bg-white/70 backdrop-blur-2xs flex items-center justify-center z-10 rounded">
+                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-lg border border-slate-200 text-xs font-semibold text-slate-800">
+                  <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
+                  Đang dựng văn bản Word A4...
+                </div>
+              </div>
+            )}
+            <div ref={docxContainerRef} className="docx-preview-wrapper shadow-2xl" />
+          </div>
+        ) : (
+          /* Render Engine 2: High-Fidelity CSS A4 Canvas Sheet */
+          <div
+            style={{
+              transform: `scale(${computedScale})`,
+              transformOrigin: "top center",
+              transition: "transform 0.15s ease-out",
+              marginBottom: `${-(A4_HEIGHT_PX * (1 - computedScale))}px`,
+            }}
+          >
+            {renderA4SheetContent(false)}
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
-      <div className="pt-2 grid grid-cols-3 gap-2">
+      <div className="pt-1 grid grid-cols-3 gap-2">
         {onPrint && (
           <button
             onClick={onPrint}
-            className="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1 shadow-xs"
+            className="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" /> In A4
           </button>
@@ -341,7 +508,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           <button
             onClick={onExportPdf}
             disabled={isExportingPdf}
-            className="bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1 shadow-xs disabled:opacity-50"
+            className="bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
           >
             <FileCode className="w-3.5 h-3.5" /> {isExportingPdf ? "Đang xuất..." : "Xuất PDF"}
           </button>
@@ -350,31 +517,34 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           <button
             onClick={onExportDocx}
             disabled={isExportingDocx}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1 shadow-xs disabled:opacity-50"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" /> {isExportingDocx ? "Đang xuất..." : "Xuất Word"}
           </button>
         )}
       </div>
 
-      {/* FULLSCREEN / EXPANDED PREVIEW MODAL */}
+      {/* FULLSCREEN / EXPANDED A4 PREVIEW MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex flex-col items-center justify-between p-4 sm:p-6 overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs z-50 flex flex-col items-center justify-between p-3 sm:p-6 overflow-hidden">
           {/* Modal Topbar */}
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-2.5 w-full max-w-5xl flex items-center justify-between z-10 mb-2">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 px-4 py-2.5 w-full max-w-6xl flex items-center justify-between z-10 mb-2 shrink-0">
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
               <div>
-                <h3 className="font-bold text-sm text-slate-900">
-                  Xem trước trực quan A4 — Tỷ lệ hình học 1:1.414 (NĐ 30 / HD 05)
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <span>Xem trước A4 (210×297 mm) — Tỷ lệ hình học chuẩn</span>
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-semibold">
+                    {isParty ? "HD 05 (14pt)" : "NĐ 30 (13pt)"}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Khổ A4 (210mm × 297mm) · Lề: Trên 20mm, Dưới 20mm, Trái 30mm, Phải 15mm · ~{pageCount} trang
+                  Lề: Trên 20mm, Dưới 20mm, Trái 30mm, Phải 15mm · Khoảng {pageCount} trang
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               {/* Modal Zoom Controls */}
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
                 <button
@@ -385,7 +555,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
                 </button>
                 <span className="px-2 font-medium text-slate-700">{Math.round(modalZoom * 100)}%</span>
                 <button
-                  onClick={() => setModalZoom((z) => Math.min(1.4, z + 0.1))}
+                  onClick={() => setModalZoom((z) => Math.min(1.5, z + 0.1))}
                   className="p-1 hover:bg-white rounded text-slate-700"
                 >
                   <ZoomIn className="w-3.5 h-3.5" />
@@ -419,7 +589,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
 
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-800 p-1.5 rounded-lg font-bold transition ml-2"
+                className="bg-slate-200 hover:bg-slate-300 text-slate-800 p-1.5 rounded-lg font-bold transition ml-1"
                 title="Đóng xem trước"
               >
                 <Minimize2 className="w-4 h-4" />
@@ -428,16 +598,31 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           </div>
 
           {/* Modal Body Container */}
-          <div className="w-full flex-1 overflow-auto bg-slate-800/60 rounded-xl p-6 flex justify-center items-start shadow-inner">
-            <div
-              style={{
-                transform: `scale(${modalZoom})`,
-                transformOrigin: "top center",
-                transition: "transform 0.15s ease-out",
-              }}
-            >
-              {renderA4SheetContent(true)}
-            </div>
+          <div 
+            ref={modalContainerRef}
+            className="w-full flex-1 overflow-auto bg-slate-800/80 rounded-xl p-4 sm:p-8 flex justify-center items-start shadow-inner"
+          >
+            {renderEngine === "docx_real" && !docxRenderError ? (
+              <div
+                style={{
+                  transform: `scale(${modalZoom})`,
+                  transformOrigin: "top center",
+                  transition: "transform 0.15s ease-out",
+                }}
+              >
+                <div ref={modalDocxContainerRef} className="docx-preview-modal-wrapper" />
+              </div>
+            ) : (
+              <div
+                style={{
+                  transform: `scale(${modalZoom})`,
+                  transformOrigin: "top center",
+                  transition: "transform 0.15s ease-out",
+                }}
+              >
+                {renderA4SheetContent(true)}
+              </div>
+            )}
           </div>
         </div>
       )}
