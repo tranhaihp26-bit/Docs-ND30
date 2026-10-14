@@ -29,7 +29,57 @@ const ai = new GoogleGenAI({
   }
 });
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+const PREFERRED_LITE_MODELS = [
+  "gemini-2.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash-lite"
+];
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+
+async function generateContentWithModelFallback(params: { contents: any; config?: any }) {
+  const modelsToTry = process.env.GEMINI_MODEL 
+    ? [process.env.GEMINI_MODEL, ...PREFERRED_LITE_MODELS]
+    : PREFERRED_LITE_MODELS;
+
+  const uniqueModels = Array.from(new Set(modelsToTry));
+  let lastError: any = null;
+
+  for (const modelId of uniqueModels) {
+    const startTime = Date.now();
+    try {
+      const response = await ai.models.generateContent({
+        model: modelId,
+        contents: params.contents,
+        config: params.config,
+      });
+
+      const durationMs = Date.now() - startTime;
+      const usage = response.usageMetadata 
+        ? { promptTokens: response.usageMetadata.promptTokenCount, candidateTokens: response.usageMetadata.candidatesTokenCount, totalTokens: response.usageMetadata.totalTokenCount }
+        : undefined;
+
+      console.log(`[GEMINI OK] model="${modelId}" status=200 duration=${durationMs}ms tokens=${JSON.stringify(usage || {})}`);
+      return { response, activeModel: modelId, durationMs };
+    } catch (error: any) {
+      const durationMs = Date.now() - startTime;
+      const statusCode = error.status || error.statusCode || (String(error.message || '').includes("503") ? 503 : "ERROR");
+      
+      if (statusCode === 503 || String(error.message || '').includes("503") || String(error.message || '').includes("UNAVAILABLE")) {
+        console.warn(`[GEMINI UNAVAILABLE] model="${modelId}" status=503 duration=${durationMs}ms`);
+      } else {
+        console.warn(`[GEMINI FAIL] model="${modelId}" status=${statusCode} duration=${durationMs}ms message="${error.message?.slice(0, 100)}"`);
+      }
+
+      lastError = error;
+      if (statusCode === 404 || statusCode === 503 || String(error.message || '').includes("404") || String(error.message || '').includes("503")) {
+        continue;
+      }
+      break;
+    }
+  }
+
+  throw lastError || new Error("GEMINI UNAVAILABLE");
+}
 
 import { fallbackRuleBasedParser } from "./src/server/parser.ts";
 
@@ -192,8 +242,7 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
 `;
 
     try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+      const { response, activeModel } = await generateContentWithModelFallback({
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -220,17 +269,20 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
       // DETERMINISTIC SAFETY NET: Cưỡng chế thể thức NĐ 30 & Zod Schema Validation
       const regime = standardType === "party" ? "party" : "administrative";
       const compliantDoc = enforceND30Standards(parsed, regime);
-      console.log(`[COMPLIANCE] Processed document: type=${compliantDoc.documentType}, regime=${regime}`);
+      console.log(`[COMPLIANCE] Processed document: type=${compliantDoc.documentType}, regime=${regime}, model=${activeModel}`);
 
       return res.json({ 
         success: true, 
         source: "gemini_ai",
+        model: activeModel,
         isFallback: false,
         formatted: compliantDoc 
       });
     } catch (error: any) {
-      console.warn("AI format or Zod validation failed, using rule-based fallback:", error.message);
-      // Fallback parser + Compliance Middleware enforcement so user is NEVER blocked
+      const is503 = error?.status === 503 || String(error?.message || '').includes("503") || String(error?.message || '').includes("UNAVAILABLE");
+      const statusNotice = is503 ? "GEMINI UNAVAILABLE" : "AI ERROR";
+      console.warn(`[AI FORMAT FALLBACK] ${statusNotice}:`, error?.message?.slice(0, 100));
+
       const regime = standardType === "party" ? "party" : "administrative";
       const rawFallback = fallbackRuleBasedParser(rawText, standardType, req.body.rawHtml);
       const compliantFallback = enforceND30Standards(rawFallback, regime);
@@ -240,7 +292,9 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
         source: "rule_fallback",
         isFallback: true,
         formatted: compliantFallback, 
-        notice: "Hệ thống đã chuẩn hóa nội dung theo quy tắc chuẩn thể thức NĐ 30/2020/NĐ-CP (Rule Engine Fallback) do dịch vụ AI không khả dụng." 
+        notice: is503 
+          ? "GEMINI UNAVAILABLE — Hệ thống đã chuẩn hóa nội dung theo quy tắc chuẩn thể thức NĐ 30/2020/NĐ-CP (Rule Engine Fallback)."
+          : "Hệ thống đã chuẩn hóa nội dung theo quy tắc chuẩn thể thức NĐ 30/2020/NĐ-CP (Rule Engine Fallback) do dịch vụ AI không khả dụng." 
       });
     }
   });
@@ -267,8 +321,7 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
     const safeText = String(text || '').slice(0, 15000);
     const prompt = `${instruction}\n\n\`\`\`html\n${safeText}\n\`\`\`\n\nChỉ trả về đoạn HTML đã được tối ưu hóa, không giải thích thêm.`;
 
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+      const { response, activeModel } = await generateContentWithModelFallback({
         contents: prompt,
       });
 
@@ -276,18 +329,21 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
       res.json({ 
         success: true, 
         source: "gemini_ai",
+        model: activeModel,
         isFallback: false,
         refined: refined.replace(/```html/g, "").replace(/```/g, "").trim() 
       });
     } catch (error: any) {
-      console.warn("AI refine error:", error.message);
-      // Return original text if AI fails
+      const is503 = error?.status === 503 || String(error?.message || '').includes("503") || String(error?.message || '').includes("UNAVAILABLE");
+      const statusNotice = is503 ? "GEMINI UNAVAILABLE" : "AI ERROR";
+      console.warn(`[AI REFINE FALLBACK] ${statusNotice}:`, error?.message?.slice(0, 100));
+
       res.json({ 
         success: true, 
         source: "rule_fallback",
         isFallback: true,
         refined: text, 
-        notice: "Không thể kết nối AI, giữ nguyên nội dung gốc." 
+        notice: is503 ? "GEMINI UNAVAILABLE — Giữ nguyên nội dung gốc." : "Không thể kết nối AI, giữ nguyên nội dung gốc." 
       });
     }
   });
