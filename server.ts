@@ -124,10 +124,16 @@ async function startServer() {
       // If plain text or txt file
       if (ext === ".txt" || req.file.mimetype === "text/plain") {
         const textContent = req.file.buffer.toString("utf-8");
+        const escaped = textContent
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
         return res.json({
           success: true,
           text: textContent,
-          html: `<p>${textContent.replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>")}</p>`,
+          html: `<p>${escaped.replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>")}</p>`,
           fileType: "txt"
         });
       }

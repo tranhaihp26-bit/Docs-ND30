@@ -15,6 +15,7 @@
  */
 
 import React, { useEffect } from "react";
+import DOMPurify from "dompurify";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
@@ -67,7 +68,7 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
       TableHeader,
       TableCell,
     ],
-    content,
+    content: DOMPurify.sanitize(content || "<p></p>"),
     editorProps: {
       attributes: {
         class: "prose max-w-none focus:outline-none min-h-[420px] p-6 font-serif text-[13pt] leading-[1.35] text-slate-900 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-slate-400 [&_th]:p-2 [&_th]:bg-slate-100 [&_td]:border [&_td]:border-slate-400 [&_td]:p-2",
@@ -82,7 +83,7 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
   // Synchronize content when external prop changes (e.g. AI format, template change, version restore)
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content, { emitUpdate: false });
+      editor.commands.setContent(DOMPurify.sanitize(content || "<p></p>"), { emitUpdate: false });
     }
   }, [content, editor]);
 

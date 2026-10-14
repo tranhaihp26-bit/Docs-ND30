@@ -16,7 +16,7 @@ import {
   validateND30Compliance, 
   type ND30ComplianceReport 
 } from "./shared/schemas/document.schema.ts";
-import { formatStandardDate } from "./server/middleware/compliance.middleware.ts";
+import { formatStandardDate, extractLocation } from "./server/middleware/compliance.middleware.ts";
 
 export interface DocumentState {
   orgHeader1: string;
@@ -61,7 +61,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "VĂN PHÒNG ỦY BAN",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "QUYẾT ĐỊNH",
       referenceNumber: "Số: .../QĐ-UBND",
       subject: "V/v ban hành quy định phân công nhiệm vụ công tác cơ quan",
@@ -90,7 +90,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "VĂN PHÒNG SỞ",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "CÔNG VĂN",
       referenceNumber: "Số: .../STP-VP",
       subject: "V/v phối hợp rà soát, kiểm tra văn bản quy phạm pháp luật",
@@ -118,7 +118,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "PHÒNG NỘI VỤ",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "BÁO CÁO",
       referenceNumber: "Số: .../BC-NV",
       subject: "Báo cáo tình hình thực hiện công tác cải cách hành chính và chuyển đổi số",
@@ -148,7 +148,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "SỞ THÔNG TIN VÀ TRUYỀN THÔNG",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "KẾ HOẠCH",
       referenceNumber: "Số: .../KH-STTTT",
       subject: "Kế hoạch triển khai ứng dụng công nghệ thông tin và văn thư điện tử",
@@ -178,7 +178,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "SỞ TÀI CHÍNH",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "TỜ TRÌNH",
       referenceNumber: "Số: .../TTr-STC",
       subject: "V/v phê duyệt dự toán kinh phí nâng cấp hệ thống quản lý văn bản và điều hành",
@@ -205,7 +205,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "VĂN PHÒNG ỦY BAN",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "THÔNG BÁO",
       referenceNumber: "Số: .../TB-VP",
       subject: "Ý kiến kết luận của Chủ tịch Ủy ban nhân dân tại phiên họp thường kỳ tháng 10",
@@ -231,7 +231,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "BAN CHẤP HÀNH ĐẢNG BỘ",
       nationalHeader1: "ĐẢNG CỘNG SẢN VIỆT NAM",
       nationalHeader2: "",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "NGHỊ QUYẾT",
       referenceNumber: "Số: ...-NQ/TU",
       subject: "Nghị quyết Hội nghị Ban Chấp hành Đảng bộ về phương hướng nhiệm vụ trọng tâm",
@@ -259,7 +259,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "BAN THƯỜNG VỤ",
       nationalHeader1: "ĐẢNG CỘNG SẢN VIỆT NAM",
       nationalHeader2: "",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "CHỈ THỊ",
       referenceNumber: "Số: ...-CT/TU",
       subject: "Về tăng cường kỷ luật, kỷ cương và trách nhiệm nêu gương của cán bộ, đảng viên",
@@ -285,7 +285,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "BAN TỔ CHỨC",
       nationalHeader1: "ĐẢNG CỘNG SẢN VIỆT NAM",
       nationalHeader2: "",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "HƯỚNG DẪN",
       referenceNumber: "Số: ...-HD/BTCTU",
       subject: "Hướng dẫn một số nội dung về công tác đánh giá, xếp loại chất lượng tổ chức đảng và đảng viên",
@@ -312,7 +312,7 @@ const TEMPLATES: TemplatePreset[] = [
       orgHeader2: "[TÊN CƠ QUAN BAN HÀNH]",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
-      locationAndDate: formatStandardDate("Hà Nội"),
+      locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "VĂN BẢN HÀNH CHÍNH",
       referenceNumber: "Số: .../...",
       subject: "V/v [Trích yếu nội dung văn bản]",
@@ -445,7 +445,8 @@ export default function App() {
       const data = await res.json();
       if (data.success && data.text) {
         setRawText(data.text);
-        setUploadedHtml(data.html || `<p>${data.text.replace(/\n/g, "</p><p>")}</p>`);
+        const sanitizedHtml = data.html ? DOMPurify.sanitize(data.html) : safeTextToHtml(data.text);
+        setUploadedHtml(sanitizedHtml);
         setSuccessMsg(`Đã trích xuất thành công nội dung từ tệp "${file.name}" (${data.text.length} ký tự). Bạn có thể chọn đưa trực tiếp vào Editor hoặc nhờ AI cấu trúc lại.`);
       } else {
         setErrorMsg(data.error || "Không thể đọc tệp tin đã tải lên.");
@@ -457,13 +458,28 @@ export default function App() {
     }
   };
 
+  const safeTextToHtml = (text: string): string => {
+    if (!text) return "<p></p>";
+    const escaped = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+    const paragraphs = escaped
+      .split(/\r?\n\r?\n+/)
+      .map(p => `<p>${p.replace(/\r?\n/g, "<br/>")}</p>`)
+      .join("");
+    return DOMPurify.sanitize(paragraphs || "<p></p>");
+  };
+
   // Direct import to editor without AI (P0-01, P0-02)
   const handleDirectImportToEditor = () => {
     if (!uploadedHtml && !rawText) {
       setErrorMsg("Chưa có nội dung tệp tin để đưa vào trình soạn thảo.");
       return;
     }
-    const cleanHtml = uploadedHtml || `<p>${rawText.replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>")}</p>`;
+    const cleanHtml = uploadedHtml ? DOMPurify.sanitize(uploadedHtml) : safeTextToHtml(rawText);
     const newDoc: DocumentState = {
       ...doc,
       bodyHtml: cleanHtml,
@@ -481,7 +497,7 @@ export default function App() {
       setErrorMsg("Vui lòng dán hoặc nhập nội dung văn bản trước.");
       return;
     }
-    const cleanHtml = `<p>${rawText.replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>")}</p>`;
+    const cleanHtml = safeTextToHtml(rawText);
     const newDoc: DocumentState = {
       ...doc,
       bodyHtml: cleanHtml
@@ -1140,12 +1156,25 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Địa danh và ngày ban hành:</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-700">Địa danh và ngày ban hành:</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const loc = extractLocation(doc.locationAndDate);
+                        handleFieldChange("locationAndDate", formatStandardDate(loc || "[Địa danh]"));
+                      }}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-medium hover:underline cursor-pointer"
+                      title="Chèn ngày hôm nay (giữ nguyên địa danh đã nhập hoặc để [Địa danh])"
+                    >
+                      Ngày hiện tại
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={doc.locationAndDate}
                     onChange={(e) => handleFieldChange("locationAndDate", e.target.value)}
-                    placeholder="VD: Hà Nội, ngày 14 tháng 10 năm 2026"
+                    placeholder="VD: [Địa danh], ngày 14 tháng 10 năm 2026"
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 italic"
                   />
                 </div>
@@ -1487,18 +1516,33 @@ export default function App() {
             <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
               {/* Score header */}
               <div className={`p-4 rounded-xl flex items-center justify-between border ${
-                complianceReport.score >= 80 ? "bg-emerald-50 border-emerald-200 text-emerald-950" : "bg-amber-50 border-amber-200 text-amber-950"
+                complianceReport.passed && complianceReport.issues.length === 0 
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-950" 
+                  : complianceReport.passed
+                  ? "bg-blue-50 border-blue-200 text-blue-950"
+                  : "bg-amber-50 border-amber-200 text-amber-950"
               }`}>
-                <div>
-                  <h4 className="font-bold text-sm">Điểm tuân thủ thể thức: {complianceReport.score}/100</h4>
+                <div className="space-y-1">
+                  <h4 className="font-bold text-sm">Kiểm tra 9 trường thể thức: {complianceReport.score}/100 điểm</h4>
                   <p className="text-[11px] opacity-80">
-                    Đạt {complianceReport.passedChecks}/{complianceReport.totalChecks} tiêu chí quy định
+                    Đạt {complianceReport.passedChecks}/{complianceReport.totalChecks} tiêu chí thành phần dữ liệu (NĐ 30 / HD 05).
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    * Lưu ý: Đây là kiểm tra 9 trường thành phần dữ liệu. Thể thức trang in A4, lề trang (20-20-15-20mm), font Times New Roman và định dạng bảng biểu được áp dụng và bảo đảm khi xuất tệp Word (.docx).
                   </p>
                 </div>
-                <div className={`text-xl font-bold px-3 py-1.5 rounded-lg ${
-                  complianceReport.score >= 80 ? "bg-emerald-600 text-white" : "bg-amber-600 text-white"
+                <div className={`text-xs font-bold px-3 py-2 rounded-lg text-center whitespace-nowrap ml-3 shrink-0 ${
+                  complianceReport.passed && complianceReport.issues.length === 0 
+                    ? "bg-emerald-600 text-white" 
+                    : complianceReport.passed 
+                    ? "bg-blue-600 text-white"
+                    : "bg-rose-600 text-white"
                 }`}>
-                  {complianceReport.score >= 80 ? "ĐẠT CHUẨN" : "CẦN SỬA"}
+                  {complianceReport.passed && complianceReport.issues.length === 0
+                    ? "ĐẠT CHUẨN (9/9)"
+                    : complianceReport.passed
+                    ? "CƠ BẢN (CÒN LƯU Ý)"
+                    : "CẦN SỬA LỖI"}
                 </div>
               </div>
 

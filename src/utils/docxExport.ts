@@ -221,20 +221,73 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
     return elements;
   }
 
-  // Fallback: Regex parser nếu không có DOMParser
-  const lines = html.replace(/<[^>]*>/g, "\n").split("\n").map(l => l.trim()).filter(Boolean);
-  lines.forEach((line) => {
-    elements.push(
-      new Paragraph({
-        alignment: AlignmentType.JUSTIFIED,
-        indent: { firstLine: 720 },
-        spacing: { before: 60, after: 60, line: 276 },
-        children: [
-          new TextRun({ text: line, font: "Times New Roman", size: 26 }),
-        ],
-      })
-    );
-  });
+  // Fallback: Parser cho môi trường Node.js / Server-side hỗ trợ cả đoạn văn và bảng biểu HTML
+  const blockRegex = /<table[\s\S]*?<\/table>|<(?:p|div|h[1-3]|li)[\s\S]*?<\/(?:p|div|h[1-3]|li)>|[^<]+/gi;
+  const blocks = html.match(blockRegex) || [];
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.toLowerCase().startsWith("<table")) {
+      const rowMatches = trimmed.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+      if (rowMatches.length > 0) {
+        const docxRows = rowMatches.map(trHtml => {
+          const cellMatches = trHtml.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) || [];
+          return new TableRow({
+            children: cellMatches.map(cellHtml => {
+              const isTh = cellHtml.toLowerCase().startsWith("<th");
+              const cellText = cellHtml.replace(/<[^>]*>/g, "").trim();
+              return new TableCell({
+                borders: {
+                  top: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                  bottom: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                  left: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                  right: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                },
+                children: [
+                  new Paragraph({
+                    alignment: isTh ? AlignmentType.CENTER : AlignmentType.LEFT,
+                    children: [
+                      new TextRun({
+                        text: cellText,
+                        font: "Times New Roman",
+                        size: 24,
+                        bold: isTh,
+                      }),
+                    ],
+                  }),
+                ],
+              });
+            }),
+          });
+        });
+
+        elements.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: docxRows,
+          })
+        );
+        continue;
+      }
+    }
+
+    // Xử lý đoạn văn
+    const text = trimmed.replace(/<[^>]*>/g, "").trim();
+    if (text) {
+      elements.push(
+        new Paragraph({
+          alignment: AlignmentType.JUSTIFIED,
+          indent: { firstLine: 720 },
+          spacing: { before: 60, after: 60, line: 276 },
+          children: [
+            new TextRun({ text, font: "Times New Roman", size: 26 }),
+          ],
+        })
+      );
+    }
+  }
 
   return elements;
 }

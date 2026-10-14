@@ -17,13 +17,13 @@ import { DocumentFormatSchema, type DocumentFormatType, LOCATION_AND_DATE_REGEX,
  * - Đối với những ngày nhỏ hơn 10 (từ ngày 01 đến ngày 09) và tháng 1, tháng 2 phải ghi thêm số 0 ở trước.
  * - Ví dụ: "Hà Nội, ngày 05 tháng 02 năm 2026", "Hải Phòng, ngày 15 tháng 3 năm 2026".
  */
-export function formatStandardDate(location: string = "Hà Nội", date: Date = new Date()): string {
+export function formatStandardDate(location: string = "[Địa danh]", date: Date = new Date()): string {
   const day = date.getDate();
   const month = date.getMonth() + 1;
   const year = date.getFullYear();
   const dayStr = day < 10 ? `0${day}` : `${day}`;
   const monthStr = (month === 1 || month === 2) ? `0${month}` : `${month}`;
-  const cleanLocation = location.trim().replace(/,$/, "") || "Hà Nội";
+  const cleanLocation = location.trim().replace(/,$/, "") || "[Địa danh]";
   return `${cleanLocation}, ngày ${dayStr} tháng ${monthStr} năm ${year}`;
 }
 
