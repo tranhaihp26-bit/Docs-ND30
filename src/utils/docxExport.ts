@@ -22,6 +22,7 @@ import {
   Header, PageNumber, LevelFormat
 } from "docx";
 import { type DocumentFormatType, isPlaceholderValue } from "../shared/schemas/document.schema.ts";
+import { COMPANY_HEADER_PROFILE_ID, createCompanyHeaderTable, COMPANY_HEADER_GEOMETRY_MM } from "../canonical/nd30/companyHeader.ts";
 
 /**
  * Interface cho Style Profile của chế độ văn bản (Nghị định 30 vs Hướng dẫn 05)
@@ -112,11 +113,13 @@ const INVISIBLE_CELL_BORDER = {
  */
 export function convertHtmlToDocxElements(
   html: string,
-  regime: "administrative" | "party" = "administrative"
+  regime: "administrative" | "party" = "administrative",
+  bodyInsetMm = 0
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
   const profile = getStyleProfile(regime);
   const defaultHalfPoints = profile.bodyFontSize * 2;
+  const bodyInsetTwips = convertMillimetersToTwip(bodyInsetMm);
 
   // Sử dụng DOMParser nếu chạy trong môi trường trình duyệt
   if (typeof window !== "undefined" && typeof window.DOMParser !== "undefined") {
@@ -196,7 +199,7 @@ export function convertHtmlToDocxElements(
 
           elements.push(
             new Table({
-              width: { size: 100, type: WidthType.PERCENTAGE },
+              width: bodyInsetMm ? {size: convertMillimetersToTwip(COMPANY_HEADER_GEOMETRY_MM.bodyWidth), type: WidthType.DXA} : {size: 100, type: WidthType.PERCENTAGE},
               borders: tableBorders,
               rows: docxRows,
             })
@@ -248,7 +251,7 @@ export function convertHtmlToDocxElements(
         elements.push(
           new Paragraph({
             alignment: AlignmentType.LEFT,
-            indent: { firstLine: 720 }, // 1.27cm
+            indent: bodyInsetMm ? {left: bodyInsetTwips, right: bodyInsetTwips, firstLine: 720} : { firstLine: 720 }, // 1.27cm
             keepNext: true,
             spacing: { before: 100, after: 60, line: 276 },
             children: [
@@ -291,7 +294,7 @@ export function convertHtmlToDocxElements(
       elements.push(
         new Paragraph({
           alignment,
-          indent: isCentered || isRight ? undefined : { firstLine: 720 }, // Thụt đầu dòng 1.27cm
+          indent: bodyInsetMm ? {left: bodyInsetTwips, right: bodyInsetTwips, ...(!isCentered && !isRight ? {firstLine: 720} : {})} : (isCentered || isRight ? undefined : {firstLine: 720}), // Thụt đầu dòng 1.27cm
           keepNext: isArticleHeader,
           spacing: {
             before: isArticleHeader ? 120 : 60,
@@ -355,7 +358,7 @@ export function convertHtmlToDocxElements(
 
         elements.push(
           new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
+            width: bodyInsetMm ? {size: convertMillimetersToTwip(COMPANY_HEADER_GEOMETRY_MM.bodyWidth), type: WidthType.DXA} : {size: 100, type: WidthType.PERCENTAGE},
             rows: docxRows,
           })
         );
@@ -391,7 +394,7 @@ export function convertHtmlToDocxElements(
       elements.push(
         new Paragraph({
           alignment: AlignmentType.JUSTIFIED,
-          indent: { firstLine: 720 },
+          indent: bodyInsetMm ? {left: bodyInsetTwips, right: bodyInsetTwips, firstLine: 720} : { firstLine: 720 },
           keepNext: isArticleHeader,
           spacing: { before: 60, after: 60, line: 276 },
           children: [
@@ -498,8 +501,9 @@ export function detectEmbeddedSignature(bodyHtml: string): boolean {
 
 export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const isParty = data.regime === "party";
+  const useCompanyHeader = !isParty && data.headerProfile === COMPANY_HEADER_PROFILE_ID;
   const profile = getStyleProfile(data.regime);
-  const bodyParagraphs = convertHtmlToDocxElements(data.bodyHtml, data.regime);
+  const bodyParagraphs = convertHtmlToDocxElements(data.bodyHtml, data.regime, useCompanyHeader ? COMPANY_HEADER_GEOMETRY_MM.bodyInset : 0);
 
   const nationalHeader1Text = isParty
     ? "ĐẢNG CỘNG SẢN VIỆT NAM"
@@ -513,7 +517,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const isHeaderPlaceholder = (!data.orgHeader2 || isPlaceholderValue(data.orgHeader2)) && (!data.referenceNumber || isPlaceholderValue(data.referenceNumber));
   const isSignaturePlaceholder = (!data.signTitle || isPlaceholderValue(data.signTitle)) && (!data.signName || isPlaceholderValue(data.signName));
 
-  const shouldRenderHeader = !hasEmbeddedHeader && !isHeaderPlaceholder && (Boolean(data.orgHeader2) || Boolean(data.referenceNumber));
+  const shouldRenderHeader = useCompanyHeader ? !hasEmbeddedHeader : (!hasEmbeddedHeader && !isHeaderPlaceholder && (Boolean(data.orgHeader2) || Boolean(data.referenceNumber)));
   const shouldRenderSignature = !hasEmbeddedSignature && !isSignaturePlaceholder && (Boolean(data.signTitle) || Boolean(data.signName));
 
   return new Document({
@@ -584,7 +588,11 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
           // ==========================================
           // 1. HEADER KHỐI ĐẦU TRANG (BẢNG ẨN 2 CỘT)
           // ==========================================
-          ...(shouldRenderHeader ? [
+          ...(shouldRenderHeader && useCompanyHeader ? [
+            createCompanyHeaderTable(data.referenceNumber, data.locationAndDate),
+            new Paragraph({ text: "", spacing: { after: 120 } }),
+          ] : []),
+          ...(shouldRenderHeader && !useCompanyHeader ? [
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
               borders: {

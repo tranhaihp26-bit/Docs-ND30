@@ -20,8 +20,10 @@ import {
 } from "./shared/schemas/document.schema.ts";
 import { formatStandardDate, extractLocation } from "./server/middleware/compliance.middleware.ts";
 import { detectDocumentType } from "./server/parser.ts";
+import { COMPANY_HEADER_PROFILE_ID, applyCompanyProfile, LOCKED_COMPANY_FIELDS } from "./canonical/nd30/companyHeader.ts";
 
 export interface DocumentState {
+  headerProfile?: "generic" | typeof COMPANY_HEADER_PROFILE_ID;
   orgHeader1: string;
   orgHeader2: string;
   nationalHeader1: string;
@@ -373,7 +375,7 @@ export default function App() {
   } | null>(null);
 
   // Primary document state (Initial default is Template QD)
-  const [doc, setDoc] = useState<DocumentState>(TEMPLATES[0].defaultData);
+  const [doc, setDoc] = useState<DocumentState>(applyCompanyProfile(TEMPLATES[0].defaultData));
 
   // Version History state
   const [versions, setVersions] = useState<Version[]>([
@@ -381,7 +383,7 @@ export default function App() {
       id: "v_init",
       timestamp: new Date().toLocaleTimeString("vi-VN") + " " + new Date().toLocaleDateString("vi-VN"),
       title: "Khởi tạo mặc định (Quyết định NĐ 30)",
-      data: TEMPLATES[0].defaultData
+      data: applyCompanyProfile(TEMPLATES[0].defaultData)
     }
   ]);
 
@@ -393,9 +395,9 @@ export default function App() {
       {
         ...doc,
         regime: standardType === "party" ? "party" : "administrative",
-        nationalHeader2: (standardType === "party" ? "" : "Độc lập - Tự do - Hạnh phúc") as any,
+        nationalHeader2: doc.nationalHeader2,
         fontFamily: "Times New Roman",
-        fontSize: 13
+        fontSize: standardType === "party" ? 14 : 13
       },
       standardType === "party" ? "party" : "administrative"
     );
@@ -413,6 +415,8 @@ export default function App() {
   };
 
   const handleFieldChange = (field: keyof DocumentState, value: string) => {
+    // Company identity is locked only for NEW templates. Imported documents stay untouched.
+    if (standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID && LOCKED_COMPANY_FIELDS.has(field)) return;
     setDoc(prev => ({ ...prev, [field]: value }));
   };
 
@@ -421,8 +425,9 @@ export default function App() {
     const t = TEMPLATES.find(x => x.id === tId);
     if (!t) return;
     setStandardType(t.type);
-    setDoc(t.defaultData);
-    pushVersion(`Áp dụng mẫu: ${t.name}`, t.defaultData);
+    const selectedDoc = t.type === "state" ? applyCompanyProfile({...t.defaultData}) : {...t.defaultData, headerProfile: "generic" as const};
+    setDoc(selectedDoc);
+    pushVersion(`Áp dụng mẫu: ${t.name}`, selectedDoc);
     setSuccessMsg(`Đã tải mẫu "${t.name}". Bạn có thể bắt đầu soạn thảo và chỉnh sửa ngay!`);
     setActiveTab("editor");
   };
@@ -598,7 +603,8 @@ export default function App() {
     if (!aiProposal) return;
     const sourceLabel = aiProposalMeta?.isFallback ? "Quy tắc dự phòng" : "AI Gemini";
     pushVersion(`Đồng ý áp dụng đề xuất (${sourceLabel} - ${standardType === 'party' ? 'HD 05' : 'NĐ 30'})`, aiProposal);
-    setDoc(aiProposal);
+    setDoc(doc.headerProfile === COMPANY_HEADER_PROFILE_ID && standardType === "state"
+      ? applyCompanyProfile({ ...aiProposal, headerProfile: COMPANY_HEADER_PROFILE_ID }) : aiProposal);
     setAiProposal(null);
     setAiProposalMeta(null);
     setSuccessMsg(`Đã áp dụng thành công cấu trúc thể thức (${sourceLabel}) vào tài liệu!`);
@@ -657,22 +663,24 @@ export default function App() {
     setErrorMsg("");
     try {
       const isParty = standardType === "party";
+      const exportDoc = !isParty && doc.headerProfile === COMPANY_HEADER_PROFILE_ID ? applyCompanyProfile(doc) : doc;
       const documentData: DocumentFormatType = {
         regime: isParty ? "party" : "administrative",
+        headerProfile: isParty ? "generic" : (exportDoc.headerProfile || "generic"),
         nationalHeader1: isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
         nationalHeader2: (isParty ? "" : "Độc lập - Tự do - Hạnh phúc") as "" | "Độc lập - Tự do - Hạnh phúc",
         fontFamily: "Times New Roman",
         fontSize: isParty ? 14 : 13,
-        orgHeader1: doc.orgHeader1,
-        orgHeader2: doc.orgHeader2,
-        locationAndDate: doc.locationAndDate,
-        documentType: doc.documentType,
-        referenceNumber: doc.referenceNumber,
-        subject: doc.subject,
-        bodyHtml: doc.bodyHtml,
-        signTitle: doc.signTitle,
-        signName: doc.signName,
-        recipients: doc.recipients,
+        orgHeader1: exportDoc.orgHeader1,
+        orgHeader2: exportDoc.orgHeader2,
+        locationAndDate: exportDoc.locationAndDate,
+        documentType: exportDoc.documentType,
+        referenceNumber: exportDoc.referenceNumber,
+        subject: exportDoc.subject,
+        bodyHtml: exportDoc.bodyHtml,
+        signTitle: exportDoc.signTitle,
+        signName: exportDoc.signName,
+        recipients: exportDoc.recipients,
       };
 
       const isDraft = isPlaceholderValue(doc.orgHeader2) || 
@@ -686,7 +694,7 @@ export default function App() {
       if (isDraft) {
         setSuccessMsg("Đã xuất bản nháp Word (.docx). Lưu ý: Văn bản còn các trường chưa hoàn thiện hoặc chưa được xác minh cấu trúc. Tệp xuất là bản nháp, cần kiểm tra trước khi phát hành.");
       } else {
-        setSuccessMsg("Đã tạo và tải xuống tệp tin Microsoft Word (.docx) chuẩn Nghị định 30 thành công!");
+        setSuccessMsg("Đã tạo DOCX theo cấu hình; vui lòng kiểm tra OOXML và trình bày Word trước khi phát hành.");
       }
     } catch (err: any) {
       setErrorMsg("Lỗi khi xuất tệp Word: " + err.message);
@@ -1469,6 +1477,11 @@ export default function App() {
                   <p className="text-[11px] opacity-80">
                     Đạt {complianceReport.passedChecks}/{complianceReport.totalChecks} tiêu chí thành phần dữ liệu (NĐ 30 / HD 05).
                   </p>
+                  {standardType === "state" && complianceReport.canonical && (
+                    <p className="text-[11px] font-semibold text-amber-700">
+                      Catalog: {complianceReport.canonical.total} quy tắc từ repository chuẩn, {complianceReport.canonical.passed} PASS / {complianceReport.canonical.failed} FAIL / {complianceReport.canonical.notEvaluated} NOT_EVALUATED. Không được coi NOT_EVALUATED là PASS.
+                    </p>
+                  )}
                   <p className="text-[10px] text-slate-500">
                     * Lưu ý: Đây là kết quả kiểm tra 9 trường thành phần dữ liệu. Quy chuẩn khổ giấy A4, lề chuẩn NĐ 30 (Trên 20mm, Dưới 20mm, Trái 30mm, Phải 15mm), phông chữ Times New Roman và định dạng bảng biểu được cấu hình và kiểm chứng trong bộ test tạo tệp Word (.docx).
                   </p>
@@ -1481,7 +1494,7 @@ export default function App() {
                     : "bg-rose-600 text-white"
                 }`}>
                   {complianceReport.passed && complianceReport.issues.length === 0
-                    ? "ĐẠT CHUẨN (9/9)"
+                    ? "ĐẠT 9/9 TRƯỜNG DỮ LIỆU"
                     : complianceReport.passed
                     ? "CƠ BẢN (CÒN LƯU Ý)"
                     : "CẦN SỬA LỖI"}
@@ -1494,7 +1507,7 @@ export default function App() {
                 {complianceReport.issues.length === 0 ? (
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 flex items-center gap-2 font-medium">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Chúc mừng! Toàn bộ 9 thành phần thể thức đều tuân thủ đúng quy định.</span>
+                    <span>9 trường dữ liệu đã đạt; chưa đồng nghĩa toàn bộ quy tắc và DOCX đã được nghiệm thu.</span>
                   </div>
                 ) : (
                   complianceReport.issues.map((issue) => (

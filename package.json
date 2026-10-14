@@ -10,7 +10,9 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "tsx test/nd30-compliance.test.ts",
-    "test:ai:live": "tsx test/gemini-live-smoke.test.ts"
+    "test:ai:live": "tsx test/gemini-live-smoke.test.ts",
+    "rules:sync": "node scripts/sync_verified_nd30.mjs",
+    "test:canonical": "tsx test/nd30-canonical-overlay.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { COMPANY_HEADER_PROFILE_ID } from "../../canonical/nd30/companyHeader.ts";
+import { auditCanonicalND30 } from "../../canonical/nd30/canonicalAudit.ts";
 
 /**
  * @file document.schema.ts
@@ -76,6 +78,7 @@ export const DocumentFormatSchema = z.object({
    * - 'party': Văn bản của Đảng (Hướng dẫn số 05-HD/VPTW)
    */
   regime: z.enum(["administrative", "party"]).default("administrative"),
+  headerProfile: z.enum(["generic", COMPANY_HEADER_PROFILE_ID]).optional(),
 
   /**
    * Quốc hiệu (Dòng 1):
@@ -190,6 +193,7 @@ export interface ND30ComplianceReport {
   totalChecks: number;
   passedChecks: number;
   issues: ND30ComplianceIssue[];
+  canonical?: { total: number; passed: number; failed: number; notEvaluated: number; needsReview: number; notApplicable: number; sourceCommit: string };
 }
 
 /**
@@ -378,12 +382,25 @@ export function validateND30Compliance(
 
   const score = Math.round((passedChecks / totalChecks) * 100);
   const passed = issues.filter(i => i.severity === "error").length === 0;
-
+  // The nine field checks ARE NOT a full legal compliance certification.
+  // The verified 435-rule catalogue is always counted, including NOT_EVALUATED.
+  const canonicalAudit = isParty ? undefined : auditCanonicalND30();
+  const canonical = canonicalAudit ? {
+    total: canonicalAudit.total,
+    passed: canonicalAudit.counts.PASS,
+    failed: canonicalAudit.counts.FAIL,
+    notEvaluated: canonicalAudit.counts.NOT_EVALUATED,
+    needsReview: canonicalAudit.counts.NEEDS_REVIEW,
+    notApplicable: canonicalAudit.counts.NOT_APPLICABLE,
+    sourceCommit: canonicalAudit.commit,
+  } : undefined;
+  // Keep the legacy 9-check issue list stable for P0 tests; show canonical coverage separately in UI.
   return {
     passed,
     score,
     totalChecks,
     passedChecks,
     issues,
+    canonical,
   };
 }
