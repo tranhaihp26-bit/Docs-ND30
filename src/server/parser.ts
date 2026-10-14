@@ -3,16 +3,15 @@
  * @description Pure rule-based parser for document structure, fallback processing, and type recognition.
  */
 
-export function fallbackRuleBasedParser(rawText: string, standardType: string, rawHtml?: string) {
+export function detectDocumentType(rawText: string, standardType: string = 'state'): string {
   const isParty = standardType === 'party' || rawText.includes("ĐẢNG CỘNG SẢN") || rawText.includes("ĐẢNG BỘ");
   
-  // 1. Structural Document Type Detection (FIX-02, E2E-01)
   // Search top portion (~30 lines / 1500 chars) for explicit type heading on standalone lines
   const topText = rawText.slice(0, 1500);
   const topLines = topText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   
   let docType = "CÔNG VĂN";
-  const docTypeKeywords = ["QUYẾT ĐỊNH", "KẾ HOẠCH", "TỜ TRÌNH", "THÔNG BÁO", "NGHỊ QUYẾT", "BÁO CÁO", "NGHỊ ĐỊNH", "CÔNG VĂN"];
+  const docTypeKeywords = ["QUYẾT ĐỊNH", "KẾ HOẠCH", "TỜ TRÌNH", "THÔNG BÁO", "NGHỊ QUYẾT", "BÁO CÁO", "NGHỊ ĐỊNH", "CHỈ THỊ", "HƯỚNG DẪN", "CÔNG VĂN"];
   
   for (const line of topLines.slice(0, 15)) {
     const upper = line.toUpperCase();
@@ -33,6 +32,15 @@ export function fallbackRuleBasedParser(rawText: string, standardType: string, r
     else if (/\bNGHỊ QUYẾT\b/i.test(topText)) docType = isParty ? "NGHỊ QUYẾT" : "NGHỊ ĐỊNH / NGHỊ QUYẾT";
     else if (/\bBÁO CÁO\b/i.test(topText)) docType = "BÁO CÁO";
   }
+
+  return docType;
+}
+
+export function fallbackRuleBasedParser(rawText: string, standardType: string, rawHtml?: string) {
+  const isParty = standardType === 'party' || rawText.includes("ĐẢNG CỘNG SẢN") || rawText.includes("ĐẢNG BỘ");
+  
+  // 1. Structural Document Type Detection (FIX-02, E2E-01)
+  const docType = detectDocumentType(rawText, standardType);
 
   // 2. Preserve HTML structure & tables (FIX-03, FIX-04)
   let htmlBody = "";

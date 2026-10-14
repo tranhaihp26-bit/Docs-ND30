@@ -212,6 +212,11 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
         parsed = JSON.parse(textRes);
       }
 
+      // Table Preservation Safety Net: If input HTML contains tables, ensure they are preserved
+      if (req.body.rawHtml && req.body.rawHtml.includes("<table") && (!parsed.bodyHtml || !parsed.bodyHtml.includes("<table"))) {
+        parsed.bodyHtml = req.body.rawHtml;
+      }
+
       // DETERMINISTIC SAFETY NET: Cưỡng chế thể thức NĐ 30 & Zod Schema Validation
       const regime = standardType === "party" ? "party" : "administrative";
       const compliantDoc = enforceND30Standards(parsed, regime);

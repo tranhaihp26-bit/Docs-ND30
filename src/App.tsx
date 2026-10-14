@@ -18,6 +18,7 @@ import {
   isPlaceholderValue 
 } from "./shared/schemas/document.schema.ts";
 import { formatStandardDate, extractLocation } from "./server/middleware/compliance.middleware.ts";
+import { detectDocumentType } from "./server/parser.ts";
 
 export interface DocumentState {
   orgHeader1: string;
@@ -482,15 +483,9 @@ export default function App() {
     }
     const cleanHtml = uploadedHtml ? DOMPurify.sanitize(uploadedHtml) : safeTextToHtml(rawText);
     
-    // Detect document type structurally from raw text or HTML
-    let detectedType = "CÔNG VĂN";
-    const topSample = (rawText || cleanHtml).slice(0, 1500).toUpperCase();
-    if (topSample.includes("KẾ HOẠCH")) detectedType = "KẾ HOẠCH";
-    else if (topSample.includes("QUYẾT ĐỊNH")) detectedType = "QUYẾT ĐỊNH";
-    else if (topSample.includes("TỜ TRÌNH")) detectedType = "TỜ TRÌNH";
-    else if (topSample.includes("THÔNG BÁO")) detectedType = "THÔNG BÁO";
-    else if (topSample.includes("BÁO CÁO")) detectedType = "BÁO CÁO";
-    else if (topSample.includes("NGHỊ QUYẾT")) detectedType = "NGHỊ QUYẾT";
+    // Detect document type structurally from raw text or HTML using the shared parser
+    const textForTypeCheck = rawText || cleanHtml.replace(/<[^>]+>/g, " ");
+    const detectedType = detectDocumentType(textForTypeCheck, standardType);
 
     const newDoc: DocumentState = {
       orgHeader1: "",
@@ -519,13 +514,7 @@ export default function App() {
       return;
     }
     const cleanHtml = safeTextToHtml(rawText);
-    let detectedType = "CÔNG VĂN";
-    const topSample = rawText.slice(0, 1500).toUpperCase();
-    if (topSample.includes("KẾ HOẠCH")) detectedType = "KẾ HOẠCH";
-    else if (topSample.includes("QUYẾT ĐỊNH")) detectedType = "QUYẾT ĐỊNH";
-    else if (topSample.includes("TỜ TRÌNH")) detectedType = "TỜ TRÌNH";
-    else if (topSample.includes("THÔNG BÁO")) detectedType = "THÔNG BÁO";
-    else if (topSample.includes("BÁO CÁO")) detectedType = "BÁO CÁO";
+    const detectedType = detectDocumentType(rawText, standardType);
 
     const newDoc: DocumentState = {
       orgHeader1: "",

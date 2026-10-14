@@ -457,6 +457,45 @@ function parseInlineNodes(element: Element, fontSizeHalfPoints: number = 26): Te
  * @param data Dữ liệu văn bản tuân thủ DocumentFormatType
  * @returns Instance Document của `docx`
  */
+export function detectEmbeddedSignature(bodyHtml: string): boolean {
+  if (!bodyHtml || typeof bodyHtml !== "string") return false;
+
+  const hasRecipients = /NƠI NHẬN\s*:/i.test(bodyHtml);
+  const hasFormula = /\b(TM\.|T\/M\.|KT\.|TL\.|TUQ\.)\b/i.test(bodyHtml);
+
+  // If both Nơi nhận and a signature formula appear in the document, signature block is embedded
+  if (hasRecipients && hasFormula) {
+    return true;
+  }
+
+  // Check for signature block lines (standalone short lines with signature titles)
+  const paragraphs = bodyHtml.split(/<\/p>|<\/div>|<br\s*\/?>/i);
+  for (const p of paragraphs) {
+    const textOnly = p.replace(/<[^>]+>/g, "").trim().toUpperCase();
+    if (textOnly.length > 0 && textOnly.length <= 60) {
+      const isSignatureLine =
+        /^TM\.\s+/i.test(textOnly) ||
+        /^T\/M\.\s+/i.test(textOnly) ||
+        /^KT\.\s+/i.test(textOnly) ||
+        /^TL\.\s+/i.test(textOnly) ||
+        /^TUQ\.\s+/i.test(textOnly) ||
+        textOnly === "GIÁM ĐỐC" ||
+        textOnly === "CHỦ TỊCH" ||
+        textOnly === "BÍ THƯ" ||
+        textOnly === "TRƯỞNG BAN" ||
+        textOnly === "TỔNG GIÁM ĐỐC" ||
+        textOnly === "PHÓ GIÁM ĐỐC" ||
+        textOnly === "PHÓ CHỦ TỊCH";
+
+      if (isSignatureLine && (hasRecipients || hasFormula)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const isParty = data.regime === "party";
   const profile = getStyleProfile(data.regime);
@@ -466,10 +505,10 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
     ? "ĐẢNG CỘNG SẢN VIỆT NAM"
     : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
 
-  const fullHtmlUpper = data.bodyHtml ? data.bodyHtml.toUpperCase() : "";
+  const topHtmlUpper = data.bodyHtml ? data.bodyHtml.slice(0, 1500).toUpperCase() : "";
 
-  const hasEmbeddedHeader = fullHtmlUpper.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") || fullHtmlUpper.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
-  const hasEmbeddedSignature = fullHtmlUpper.includes("NƠI NHẬN:") || fullHtmlUpper.includes("TM.") || fullHtmlUpper.includes("T/M.") || fullHtmlUpper.includes("CHỦ TỊCH") || fullHtmlUpper.includes("GIÁM ĐỐC");
+  const hasEmbeddedHeader = topHtmlUpper.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") || topHtmlUpper.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
+  const hasEmbeddedSignature = detectEmbeddedSignature(data.bodyHtml);
 
   const isHeaderPlaceholder = (!data.orgHeader2 || isPlaceholderValue(data.orgHeader2)) && (!data.referenceNumber || isPlaceholderValue(data.referenceNumber));
   const isSignaturePlaceholder = (!data.signTitle || isPlaceholderValue(data.signTitle)) && (!data.signName || isPlaceholderValue(data.signName));
