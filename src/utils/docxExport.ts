@@ -18,9 +18,67 @@
 
 import { 
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
-  WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip, PageOrientation 
+  WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip, PageOrientation,
+  Header, PageNumber
 } from "docx";
 import type { DocumentFormatType } from "../shared/schemas/document.schema.ts";
+
+/**
+ * Interface cho Style Profile của chế độ văn bản (Nghị định 30 vs Hướng dẫn 05)
+ */
+export interface DocumentStyleProfile {
+  regime: "administrative" | "party";
+  bodyFontSize: number;          // Cỡ chữ nội dung (13pt vs 14pt)
+  heading1FontSize: number;      // Cỡ chữ H1 (14pt vs 15pt)
+  heading2FontSize: number;      // Cỡ chữ H2 (13pt vs 14pt)
+  heading3FontSize: number;      // Cỡ chữ H3 (13pt vs 14pt)
+  documentTypeFontSize: number;  // Cỡ chữ tên loại văn bản (14pt vs 15pt)
+  orgHeader1FontSize: number;    // Cỡ chữ cơ quan cấp trên (12pt)
+  orgHeader2FontSize: number;    // Cỡ chữ cơ quan ban hành (13pt)
+  nationalHeader1FontSize: number; // Cỡ chữ Quốc hiệu/Đảng (13pt vs 14pt)
+  nationalHeader2FontSize: number; // Cỡ chữ Tiêu ngữ (13pt vs 0)
+  signTitleFontSize: number;     // Cỡ chữ Chức vụ (13pt vs 14pt)
+  signNameFontSize: number;      // Cỡ chữ Họ tên người ký (13pt vs 14pt)
+  pageNumberFontSize: number;    // Cỡ chữ số trang (13pt vs 14pt)
+}
+
+/**
+ * Trả về Style Profile theo Nghị định 30/2020/NĐ-CP (Hành chính) hoặc Hướng dẫn 05-HD/VPTW (Đảng)
+ */
+export function getStyleProfile(regime: "administrative" | "party" = "administrative"): DocumentStyleProfile {
+  if (regime === "party") {
+    return {
+      regime: "party",
+      bodyFontSize: 14,
+      heading1FontSize: 15,
+      heading2FontSize: 14,
+      heading3FontSize: 14,
+      documentTypeFontSize: 15,
+      orgHeader1FontSize: 12,
+      orgHeader2FontSize: 13,
+      nationalHeader1FontSize: 14,
+      nationalHeader2FontSize: 0,
+      signTitleFontSize: 14,
+      signNameFontSize: 14,
+      pageNumberFontSize: 14,
+    };
+  }
+  return {
+    regime: "administrative",
+    bodyFontSize: 13,
+    heading1FontSize: 14,
+    heading2FontSize: 13,
+    heading3FontSize: 13,
+    documentTypeFontSize: 14,
+    orgHeader1FontSize: 12,
+    orgHeader2FontSize: 13,
+    nationalHeader1FontSize: 13,
+    nationalHeader2FontSize: 13,
+    signTitleFontSize: 13,
+    signNameFontSize: 13,
+    pageNumberFontSize: 13,
+  };
+}
 
 /**
  * Định nghĩa kích thước khổ giấy A4 chuẩn (210mm x 297mm) theo Phụ lục I Nghị định 30/2020/NĐ-CP
@@ -52,8 +110,13 @@ const INVISIBLE_CELL_BORDER = {
 /**
  * Chuyển đổi mã HTML từ Tiptap Editor thành danh sách Paragraph & Table trong DOCX
  */
-export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
+export function convertHtmlToDocxElements(
+  html: string,
+  regime: "administrative" | "party" = "administrative"
+): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
+  const profile = getStyleProfile(regime);
+  const defaultHalfPoints = profile.bodyFontSize * 2;
 
   // Sử dụng DOMParser nếu chạy trong môi trường trình duyệt
   if (typeof window !== "undefined" && typeof window.DOMParser !== "undefined") {
@@ -97,14 +160,18 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
                 insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
               };
 
-          const docxRows = trElements.map(tr => {
+          const docxRows = trElements.map((tr, index) => {
             const cellElements = Array.from(tr.children).filter(
               c => c.tagName.toLowerCase() === "td" || c.tagName.toLowerCase() === "th"
             );
+            const isHeaderRow = index === 0 && Array.from(tr.children).some(c => c.tagName.toLowerCase() === "th");
+
             return new TableRow({
+              cantSplit: true,
+              tableHeader: isHeaderRow,
               children: cellElements.map(cell => {
                 const isHeader = cell.tagName.toLowerCase() === "th";
-                const cellRuns = parseInlineNodes(cell);
+                const cellRuns = parseInlineNodes(cell, defaultHalfPoints);
                 return new TableCell({
                   borders: isHiddenTable ? INVISIBLE_CELL_BORDER : undefined,
                   margins: { top: 100, bottom: 100, left: 140, right: 140 },
@@ -116,7 +183,7 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
                         new TextRun({
                           text: cell.textContent?.trim() || "",
                           font: "Times New Roman",
-                          size: 24, // 12pt
+                          size: (profile.bodyFontSize - 1) * 2, // 12pt hoặc 13pt cho ô bảng
                           bold: isHeader,
                         }),
                       ],
@@ -138,17 +205,18 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
         }
       }
 
-      // Xử lý các thẻ tiêu đề (H1, H2, H3) theo chuẩn NĐ 30
+      // Xử lý các thẻ tiêu đề (H1, H2, H3) theo profile
       if (tagName === "h1") {
         elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
+            keepNext: true,
             spacing: { before: 180, after: 80, line: 276 },
             children: [
               new TextRun({
                 text: textContent.toUpperCase(),
                 bold: true,
-                size: 28, // 14pt
+                size: profile.heading1FontSize * 2,
                 font: "Times New Roman",
               }),
             ],
@@ -161,12 +229,13 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
         elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
+            keepNext: true,
             spacing: { before: 140, after: 60, line: 276 },
             children: [
               new TextRun({
                 text: textContent.toUpperCase(),
                 bold: true,
-                size: 26, // 13pt
+                size: profile.heading2FontSize * 2,
                 font: "Times New Roman",
               }),
             ],
@@ -180,12 +249,13 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
           new Paragraph({
             alignment: AlignmentType.LEFT,
             indent: { firstLine: 720 }, // 1.27cm
+            keepNext: true,
             spacing: { before: 100, after: 60, line: 276 },
             children: [
               new TextRun({
                 text: textContent,
                 bold: true,
-                size: 26, // 13pt
+                size: profile.heading3FontSize * 2,
                 font: "Times New Roman",
               }),
             ],
@@ -196,13 +266,19 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
 
       // Xử lý danh sách (ul/ol)
       if (tagName === "ul" || tagName === "ol") {
-        Array.from(child.children).forEach((li) => {
+        Array.from(child.children).forEach((li, idx) => {
+          const inlineRuns = parseInlineNodes(li, defaultHalfPoints);
+          const prefix = tagName === "ol" ? `${idx + 1}. ` : undefined;
+
           elements.push(
             new Paragraph({
               bullet: tagName === "ul" ? { level: 0 } : undefined,
               indent: { left: 720 },
               spacing: { before: 40, after: 40, line: 276 },
-              children: parseInlineNodes(li),
+              children: [
+                ...(prefix ? [new TextRun({ text: prefix, font: "Times New Roman", size: defaultHalfPoints, bold: true })] : []),
+                ...inlineRuns
+              ],
             })
           );
         });
@@ -210,19 +286,20 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
       }
 
       // Xử lý đoạn văn thông thường (<p>, <div>)
-      const runs = parseInlineNodes(child);
-      const isArticleHeader = /^(Điều\s+\d+|Khoản\s+\d+|Điểm\s+[a-zđ])/i.test(textContent);
+      const runs = parseInlineNodes(child, defaultHalfPoints);
+      const isArticleHeader = /^(Điều\s+\d+|Khoản\s+\d+|Điểm\s+[a-zđ]|Phần\s+[I|V|X]+)/i.test(textContent);
       
       elements.push(
         new Paragraph({
           alignment,
-          indent: isCentered || isRight ? undefined : { firstLine: 720 }, // Thụt đầu dòng 1.27cm theo NĐ 30
+          indent: isCentered || isRight ? undefined : { firstLine: 720 }, // Thụt đầu dòng 1.27cm
+          keepNext: isArticleHeader,
           spacing: {
             before: isArticleHeader ? 120 : 60,
             after: 60,
             line: 276, // Dãn dòng 1.15 chuẩn
           },
-          children: runs.length > 0 ? runs : [new TextRun({ text: textContent, font: "Times New Roman", size: 26 })],
+          children: runs.length > 0 ? runs : [new TextRun({ text: textContent, font: "Times New Roman", size: defaultHalfPoints })],
         })
       );
     });
@@ -230,20 +307,25 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
     return elements;
   }
 
-  // Fallback: Parser cho môi trường Node.js / Server-side hỗ trợ cả đoạn văn và bảng biểu HTML
-  const blockRegex = /<table[\s\S]*?<\/table>|<(?:p|div|h[1-3]|li)[\s\S]*?<\/(?:p|div|h[1-3]|li)>|[^<]+/gi;
+  // Fallback: Parser cho môi trường Node.js / Server-side hỗ trợ cả đoạn văn, danh sách và bảng biểu HTML
+  const blockRegex = /<table[\s\S]*?<\/table>|<ol[\s\S]*?<\/ol>|<ul[\s\S]*?<\/ul>|<(?:p|div|h[1-3]|li)[\s\S]*?<\/(?:p|div|h[1-3]|li)>|[^<]+/gi;
   const blocks = html.match(blockRegex) || [];
 
   for (const block of blocks) {
     const trimmed = block.trim();
     if (!trimmed) continue;
 
+    // 1. Xử lý Bảng
     if (trimmed.toLowerCase().startsWith("<table")) {
       const rowMatches = trimmed.match(/<tr[\s\S]*?<\/tr>/gi) || [];
       if (rowMatches.length > 0) {
-        const docxRows = rowMatches.map(trHtml => {
+        const docxRows = rowMatches.map((trHtml, rowIndex) => {
           const cellMatches = trHtml.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) || [];
+          const isThRow = rowIndex === 0 && trHtml.toLowerCase().includes("<th");
+
           return new TableRow({
+            cantSplit: true,
+            tableHeader: isThRow,
             children: cellMatches.map(cellHtml => {
               const isTh = cellHtml.toLowerCase().startsWith("<th");
               const cellText = cellHtml.replace(/<[^>]*>/g, "").trim();
@@ -261,7 +343,7 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
                       new TextRun({
                         text: cellText,
                         font: "Times New Roman",
-                        size: 24,
+                        size: (profile.bodyFontSize - 1) * 2,
                         bold: isTh,
                       }),
                     ],
@@ -282,16 +364,40 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
       }
     }
 
-    // Xử lý đoạn văn
+    // 2. Xử lý Danh sách (ol, ul)
+    if (trimmed.toLowerCase().startsWith("<ol") || trimmed.toLowerCase().startsWith("<ul")) {
+      const isOl = trimmed.toLowerCase().startsWith("<ol");
+      const liMatches = trimmed.match(/<li[\s\S]*?<\/li>/gi) || [];
+      liMatches.forEach((liHtml, idx) => {
+        const text = liHtml.replace(/<[^>]*>/g, "").trim();
+        const prefix = isOl ? `${idx + 1}. ` : undefined;
+        elements.push(
+          new Paragraph({
+            bullet: !isOl ? { level: 0 } : undefined,
+            indent: { left: 720 },
+            spacing: { before: 40, after: 40, line: 276 },
+            children: [
+              ...(prefix ? [new TextRun({ text: prefix, font: "Times New Roman", size: defaultHalfPoints, bold: true })] : []),
+              new TextRun({ text, font: "Times New Roman", size: defaultHalfPoints }),
+            ],
+          })
+        );
+      });
+      continue;
+    }
+
+    // 3. Xử lý Đoạn văn
     const text = trimmed.replace(/<[^>]*>/g, "").trim();
     if (text) {
+      const isArticleHeader = /^(Điều\s+\d+|Khoản\s+\d+|Điểm\s+[a-zđ]|Phần\s+[I|V|X]+)/i.test(text);
       elements.push(
         new Paragraph({
           alignment: AlignmentType.JUSTIFIED,
           indent: { firstLine: 720 },
+          keepNext: isArticleHeader,
           spacing: { before: 60, after: 60, line: 276 },
           children: [
-            new TextRun({ text, font: "Times New Roman", size: 26 }),
+            new TextRun({ text, font: "Times New Roman", size: defaultHalfPoints }),
           ],
         })
       );
@@ -304,7 +410,7 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
 /**
  * Trích xuất các node inline (strong, em, u, text) trong một thẻ HTML
  */
-function parseInlineNodes(element: Element): TextRun[] {
+function parseInlineNodes(element: Element, fontSizeHalfPoints: number = 26): TextRun[] {
   const runs: TextRun[] = [];
 
   const traverse = (node: Node, currentFormat: { bold: boolean; italic: boolean; underline: boolean }) => {
@@ -315,7 +421,7 @@ function parseInlineNodes(element: Element): TextRun[] {
           new TextRun({
             text,
             font: "Times New Roman",
-            size: 26, // 13pt
+            size: fontSizeHalfPoints,
             bold: currentFormat.bold,
             italics: currentFormat.italic,
             underline: currentFormat.underline ? {} : undefined,
@@ -355,7 +461,8 @@ function parseInlineNodes(element: Element): TextRun[] {
  */
 export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const isParty = data.regime === "party";
-  const bodyParagraphs = convertHtmlToDocxElements(data.bodyHtml);
+  const profile = getStyleProfile(data.regime);
+  const bodyParagraphs = convertHtmlToDocxElements(data.bodyHtml, data.regime);
 
   const nationalHeader1Text = isParty
     ? "ĐẢNG CỘNG SẢN VIỆT NAM"
@@ -367,7 +474,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
         document: {
           run: {
             font: "Times New Roman",
-            size: 26, // 13pt
+            size: profile.bodyFontSize * 2, // 26 (13pt) cho nhà nước, 28 (14pt) cho Đảng
             color: "000000",
           },
           paragraph: {
@@ -379,10 +486,28 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
     sections: [
       {
         properties: {
+          titlePage: true, // Bật chế độ trang đầu riêng (không hiển thị header/số trang ở trang 1)
           page: {
             size: ND30_PAGE_SIZE,
             margin: ND30_PAGE_MARGINS,
           },
+        },
+        headers: {
+          default: new Header({
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 120, after: 120 },
+                children: [
+                  new TextRun({
+                    children: [PageNumber.CURRENT],
+                    font: "Times New Roman",
+                    size: profile.pageNumberFontSize * 2,
+                  }),
+                ],
+              }),
+            ],
+          }),
         },
         children: [
           // ==========================================
@@ -414,7 +539,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                             new TextRun({
                               text: data.orgHeader1.toUpperCase(),
                               font: "Times New Roman",
-                              size: 24, // 12pt, in hoa, đứng
+                              size: profile.orgHeader1FontSize * 2, // 12pt (24 half-pt)
                             }),
                           ],
                         }),
@@ -426,12 +551,12 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                           new TextRun({
                             text: data.orgHeader2.toUpperCase(),
                             font: "Times New Roman",
-                            size: 26, // 13pt, in hoa, đứng, đậm
+                            size: profile.orgHeader2FontSize * 2, // 13pt (26 half-pt)
                             bold: true,
                           }),
                         ],
                       }),
-                      // Vạch kẻ nét liền dưới tên cơ quan ban hành (dài từ 1/3 đến 1/2 độ dài dòng chữ)
+                      // Vạch kẻ nét liền dưới tên cơ quan ban hành
                       new Paragraph({
                         alignment: AlignmentType.CENTER,
                         spacing: { line: 160, after: 60 },
@@ -451,7 +576,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                           new TextRun({
                             text: data.referenceNumber,
                             font: "Times New Roman",
-                            size: 26, // 13pt
+                            size: profile.bodyFontSize * 2,
                           }),
                         ],
                       }),
@@ -470,7 +595,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                           new TextRun({
                             text: nationalHeader1Text,
                             font: "Times New Roman",
-                            size: isParty ? 26 : 24, // 12pt - 13pt, in hoa, đứng, đậm
+                            size: profile.nationalHeader1FontSize * 2,
                             bold: true,
                           }),
                         ],
@@ -483,12 +608,12 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                             new TextRun({
                               text: data.nationalHeader2,
                               font: "Times New Roman",
-                              size: 26, // 13pt, chữ thường, đứng, đậm
+                              size: profile.nationalHeader2FontSize * 2,
                               bold: true,
                             }),
                           ],
                         }),
-                        // Vạch kẻ nét liền dưới tiêu ngữ (bằng độ dài của dòng chữ)
+                        // Vạch kẻ nét liền dưới tiêu ngữ
                         new Paragraph({
                           alignment: AlignmentType.CENTER,
                           spacing: { line: 160, after: 60 },
@@ -501,7 +626,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                           ],
                         }),
                       ] : []),
-                      // Địa danh và ngày, tháng, năm ban hành (cỡ 13-14, chữ thường, nghiêng)
+                      // Địa danh và ngày, tháng, năm ban hành
                       new Paragraph({
                         alignment: AlignmentType.CENTER,
                         spacing: { line: 240, after: 60 },
@@ -509,7 +634,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                           new TextRun({
                             text: data.locationAndDate,
                             font: "Times New Roman",
-                            size: 26, // 13pt
+                            size: profile.bodyFontSize * 2,
                             italics: true,
                           }),
                         ],
@@ -525,32 +650,34 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
           new Paragraph({ text: "", spacing: { after: 120 } }),
 
           // ==========================================
-          // 2. TÊN LOẠI VĂN BẢN (IN HOA, ĐỨNG, ĐẬM, 14PT, CHÍNH GIỮA)
+          // 2. TÊN LOẠI VĂN BẢN (IN HOA, ĐỨNG, ĐẬM, CHÍNH GIỮA)
           // ==========================================
           new Paragraph({
             alignment: AlignmentType.CENTER,
+            keepNext: true,
             spacing: { before: 120, after: 60, line: 276 },
             children: [
               new TextRun({
                 text: data.documentType.toUpperCase(),
                 font: "Times New Roman",
-                size: 28, // 14pt
+                size: profile.documentTypeFontSize * 2, // 14pt (28) vs 15pt (30)
                 bold: true,
               }),
             ],
           }),
 
           // ==========================================
-          // 3. TRÍCH YẾU NỘI DUNG VĂN BẢN (CỠ 13-14PT, ĐẬM/NGHIÊNG)
+          // 3. TRÍCH YẾU NỘI DUNG VĂN BẢN (ĐẬM/NGHIÊNG)
           // ==========================================
           new Paragraph({
             alignment: AlignmentType.CENTER,
+            keepNext: true,
             spacing: { before: 60, after: 180, line: 276 },
             children: [
               new TextRun({
                 text: data.subject,
                 font: "Times New Roman",
-                size: 26, // 13pt
+                size: profile.bodyFontSize * 2,
                 bold: true,
                 italics: true,
               }),
@@ -635,13 +762,13 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                               new TextRun({
                                 text: line.toUpperCase(),
                                 font: "Times New Roman",
-                                size: 26, // 13pt
+                                size: profile.signTitleFontSize * 2,
                                 bold: true,
                               }),
                             ],
                           })
                         ),
-                      // Lời ghi chú "(Ký, ghi rõ họ tên và đóng dấu)"
+                      // Lời ghi chú "(Ký, đóng dấu)"
                       new Paragraph({
                         alignment: AlignmentType.CENTER,
                         spacing: { line: 240, after: 40 },
@@ -664,7 +791,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                           new TextRun({
                             text: data.signName,
                             font: "Times New Roman",
-                            size: 26, // 13pt
+                            size: profile.signNameFontSize * 2,
                             bold: true,
                           }),
                         ],

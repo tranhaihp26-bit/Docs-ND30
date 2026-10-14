@@ -71,7 +71,7 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
     content: DOMPurify.sanitize(content || "<p></p>"),
     editorProps: {
       attributes: {
-        class: "prose max-w-none focus:outline-none min-h-[420px] p-6 font-serif text-[13pt] leading-[1.35] text-slate-900 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-slate-400 [&_th]:p-2 [&_th]:bg-slate-100 [&_td]:border [&_td]:border-slate-400 [&_td]:p-2",
+        class: `prose max-w-none focus:outline-none min-h-[420px] p-6 font-serif ${isParty ? "text-[14pt]" : "text-[13pt]"} leading-[1.35] text-slate-900 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-slate-400 [&_th]:p-2 [&_th]:bg-slate-100 [&_td]:border [&_td]:border-slate-400 [&_td]:p-2`,
         style: "font-family: 'Times New Roman', Times, serif;",
       },
     },

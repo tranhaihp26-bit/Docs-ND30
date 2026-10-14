@@ -17,12 +17,13 @@ import {
 } from "../src/server/middleware/compliance.middleware.ts";
 import {
   generateND30DocxDocument,
+  getStyleProfile,
   ND30_PAGE_SIZE,
   ND30_PAGE_MARGINS
 } from "../src/utils/docxExport.ts";
 
 console.log("==================================================================");
-console.log(" BỘ KIỂM TRA TOÀN DIỆN THỂ THỨC NGHỊ ĐỊNH 30/2020 & HD 05 (21 TESTS)");
+console.log(" BỘ KIỂM TRA TOÀN DIỆN THỂ THỨC NGHỊ ĐỊNH 30/2020 & HD 05 (25 TESTS)");
 console.log("==================================================================\n");
 
 let passed = 0;
@@ -390,16 +391,164 @@ async function main() {
   });
 
   // ----------------------------------------------------------------------
+  // 22. Profile định dạng riêng NĐ30 (13pt) vs HD05 (14pt)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-22", "Style profiles phân biệt chính xác NĐ 30 (13pt) và HD 05 (14pt)", () => {
+    const adminProfile = getStyleProfile("administrative");
+    const partyProfile = getStyleProfile("party");
+
+    assert.equal(adminProfile.bodyFontSize, 13, "NĐ 30 cỡ chữ nội dung phải là 13pt");
+    assert.equal(adminProfile.documentTypeFontSize, 14, "NĐ 30 cỡ chữ tên loại văn bản phải là 14pt");
+
+    assert.equal(partyProfile.bodyFontSize, 14, "HD 05 cỡ chữ nội dung phải là 14pt");
+    assert.equal(partyProfile.documentTypeFontSize, 15, "HD 05 cỡ chữ tên loại văn bản phải là 15pt");
+  });
+
+  // ----------------------------------------------------------------------
+  // 23. Đánh số trang tự động OOXML & Bỏ hiển thị trang đầu (titlePage: true)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-23", "Đánh số trang động trong OOXML header và cấu hình titlePage ẩn trang đầu", async () => {
+    const sampleMultiPage: DocumentFormatType = {
+      regime: "administrative",
+      nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+      fontFamily: "Times New Roman",
+      fontSize: 13,
+      orgHeader1: "ỦY BAN NHÂN DÂN THÀNH PHỐ",
+      orgHeader2: "SỞ KẾ HOẠCH VÀ ĐẦU TƯ",
+      locationAndDate: "Hải Phòng, ngày 14 tháng 10 năm 2026",
+      documentType: "KẾ HOẠCH",
+      referenceNumber: "Số: 105/KH-SKHĐT",
+      subject: "Kế hoạch phát triển kinh tế xã hội giai đoạn 2026-2030",
+      bodyHtml: `<p>Nội dung trang 1...</p><p>Nội dung trang 2...</p>`,
+      signTitle: "GIÁM ĐỐC",
+      signName: "Trần Văn C",
+      recipients: "Như trên;\nLưu: VT."
+    };
+
+    const doc = generateND30DocxDocument(sampleMultiPage);
+    const buffer = await Packer.toBuffer(doc);
+    const zip = await JSZip.loadAsync(buffer);
+
+    // 1. Kiểm tra word/document.xml chứa thẻ <w:titlePg/>
+    const docXml = await zip.file("word/document.xml")?.async("string");
+    assert.ok(docXml && (docXml.includes("w:titlePg") || docXml.includes("w:titlePage")), "OOXML document.xml phải có w:titlePg để ẩn số trang ở trang đầu tiên");
+
+    // 2. Kiểm tra header xml chứa trường đánh số trang fldSimple w:instr="PAGE"
+    const headerFiles = Object.keys(zip.files).filter(f => f.startsWith("word/header"));
+    assert.ok(headerFiles.length > 0, "Phải tạo tệp word/header*.xml để đánh số trang");
+
+    let foundPageNum = false;
+    for (const hFile of headerFiles) {
+      const hXml = await zip.file(hFile)?.async("string");
+      if (hXml && (hXml.includes('w:instr="PAGE"') || hXml.includes("PAGE"))) {
+        foundPageNum = true;
+        break;
+      }
+    }
+    assert.ok(foundPageNum, "Tệp header XML phải chứa trường đánh số trang động PAGE");
+  });
+
+  // ----------------------------------------------------------------------
+  // 24. Chuyển đổi danh sách (ol/ul) và ngắt trang bảng (cantSplit, tableHeader)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-24", "Xử lý danh sách có số tự động và thuộc tính ngắt trang bảng cantSplit", async () => {
+    const sampleListAndTable: DocumentFormatType = {
+      regime: "administrative",
+      nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+      fontFamily: "Times New Roman",
+      fontSize: 13,
+      orgHeader1: "",
+      orgHeader2: "ỦY BAN NHÂN DÂN QUẬN",
+      locationAndDate: "Hà Nội, ngày 15 tháng 10 năm 2026",
+      documentType: "THÔNG BÁO",
+      referenceNumber: "Số: 45/TB-UBND",
+      subject: "Thông báo phân công nhiệm vụ và lịch làm việc",
+      bodyHtml: `
+        <p>Danh sách các công việc cần hoàn thành:</p>
+        <ol>
+          <li>Kiểm tra thể thức văn bản.</li>
+          <li>Rà soát danh mục báo cáo.</li>
+        </ol>
+        <table>
+          <tr><th>STT</th><th>Hạng mục</th></tr>
+          <tr><td>1</td><td>Thiết kế giao diện</td></tr>
+        </table>
+      `,
+      signTitle: "CHỦ TỊCH",
+      signName: "Nguyễn Văn D",
+      recipients: "Như trên;\nLưu: VT."
+    };
+
+    const doc = generateND30DocxDocument(sampleListAndTable);
+    const buffer = await Packer.toBuffer(doc);
+    const zip = await JSZip.loadAsync(buffer);
+
+    const docXml = await zip.file("word/document.xml")?.async("string");
+    assert.ok(docXml, "Phải đọc được document.xml");
+    assert.ok(docXml.includes("w:cantSplit"), "Bảng dữ liệu phải có thuộc tính w:cantSplit chống ngắt dòng bất hợp lý");
+    assert.ok(docXml.includes("w:tblHeader"), "Hàng tiêu đề bảng phải có thuộc tính w:tblHeader để lặp lại khi sang trang");
+
+    const textResult = await mammoth.extractRawText({ buffer });
+    assert.ok(textResult.value.includes("1. Kiểm tra thể thức văn bản"), "Danh sách đánh số phải giữ nguyên thứ tự và tiền tố số");
+  });
+
+  // ----------------------------------------------------------------------
+  // 25. Kiểm thử tài liệu dài 5 trang (Multi-page Fixture F03)
+  // ----------------------------------------------------------------------
+  await runTest("TEST-25", "Tạo và xác minh tài liệu báo cáo 5 trang chứa tiêu đề, bảng biểu và danh sách", async () => {
+    let longBody = `<p>Kính gửi: Ủy ban nhân dân thành phố</p>`;
+    longBody += `<h1>I. TÌNH HÌNH THỰC HIỆN NHIỆM VỤ CÔNG TÁC</h1>`;
+    for (let i = 1; i <= 20; i++) {
+      longBody += `<p>Đoạn văn bản thứ ${i} báo cáo tiến độ chi tiết nhiệm vụ công tác xã hội và cải cách hành chính. Đảm bảo toàn bộ văn bản tuân thủ thể thức Nghị định 30/2020/NĐ-CP của Chính phủ.</p>`;
+    }
+    longBody += `<h2>1. Danh mục các dự án triển khai</h2>`;
+    longBody += `<ol><li>Dự án số hóa văn thư lưu trữ</li><li>Dự án ứng dụng chữ ký số chuyên dùng</li></ol>`;
+    longBody += `<table><tr><th>STT</th><th>Tên dự án</th><th>Trạng thái</th></tr>`;
+    for (let j = 1; j <= 15; j++) {
+      longBody += `<tr><td>${j}</td><td>Dự án công nghệ số ${j}</td><td>Hoàn thành 100%</td></tr>`;
+    }
+    longBody += `</table>`;
+
+    const sample5Page: DocumentFormatType = {
+      regime: "administrative",
+      nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
+      fontFamily: "Times New Roman",
+      fontSize: 13,
+      orgHeader1: "ỦY BAN NHÂN DÂN THÀNH PHỐ",
+      orgHeader2: "SỞ THÔNG TIN VÀ TRUYỀN THÔNG",
+      locationAndDate: "Đà Nẵng, ngày 20 tháng 10 năm 2026",
+      documentType: "BÁO CÁO",
+      referenceNumber: "Số: 300/BC-STTTT",
+      subject: "Báo cáo tổng kết công tác chuyển đổi số và văn thư lưu trữ giai đoạn 2021-2026",
+      bodyHtml: longBody,
+      signTitle: "GIÁM ĐỐC",
+      signName: "Lê Văn E",
+      recipients: "Như kính gửi;\nUBND TP (để b/c);\nLưu: VT."
+    };
+
+    const doc = generateND30DocxDocument(sample5Page);
+    const buffer = await Packer.toBuffer(doc);
+    assert.ok(buffer.length > 10000, "File Word 5 trang sinh ra phải có kích thước dung lượng hợp lệ (>10KB)");
+
+    const textResult = await mammoth.extractRawText({ buffer });
+    assert.ok(textResult.value.includes("Đoạn văn bản thứ 20"), "Phải giữ trọn vẹn 20 đoạn văn bản không bị xén cụt");
+    assert.ok(textResult.value.includes("Dự án công nghệ số 15"), "Phải giữ trọn vẹn 15 hàng dữ liệu trong bảng");
+  });
+
+  // ----------------------------------------------------------------------
   // TỔNG KẾT KẾT QUẢ KIỂM TRA
   // ----------------------------------------------------------------------
   console.log("\n==================================================================");
-  console.log(` KẾT QUẢ KIỂM TRA: ${passed}/21 PASS, ${failed} FAIL`);
+  console.log(` KẾT QUẢ KIỂM TRA: ${passed}/25 PASS, ${failed} FAIL`);
   console.log("==================================================================");
 
   if (failed > 0) {
     process.exit(1);
   } else {
-    console.log(" TẤT CẢ 21 KIỂM TRA THỂ THỨC ĐỀU ĐẠT CHUẨN XÁC THỰC NGHIỆM THU!");
+    console.log(" TẤT CẢ 25 KIỂM TRA THỂ THỨC ĐỀU ĐẠT CHUẨN XÁC THỰC NGHIỆM THU!");
   }
 }
 

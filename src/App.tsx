@@ -57,26 +57,26 @@ const TEMPLATES: TemplatePreset[] = [
     type: "state",
     badge: "NĐ 30 Cá biệt",
     defaultData: {
-      orgHeader1: "ỦY BAN NHÂN DÂN THÀNH PHỐ",
-      orgHeader2: "VĂN PHÒNG ỦY BAN",
+      orgHeader1: "[CƠ QUAN CẤP TRÊN]",
+      orgHeader2: "[CƠ QUAN BAN HÀNH]",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "QUYẾT ĐỊNH",
-      referenceNumber: "Số: .../QĐ-UBND",
-      subject: "V/v ban hành quy định phân công nhiệm vụ công tác cơ quan",
+      referenceNumber: "Số: .../QĐ-[TÊN CƠ QUAN]",
+      subject: "V/v [Trích yếu nội dung quyết định]",
       bodyHtml: `
-        <p><strong><em>Căn cứ Luật Tổ chức chính quyền địa phương ngày 19 tháng 6 năm 2015; Luật sửa đổi, bổ sung một số điều của Luật Tổ chức Chính phủ và Luật Tổ chức chính quyền địa phương ngày 22 tháng 11 năm 2019;</em></strong></p>
+        <p><strong><em>Căn cứ [Tên Luật/Văn bản quy định chức năng, nhiệm vụ của cơ quan ban hành];</em></strong></p>
         <p><strong><em>Căn cứ Nghị định số 30/2020/NĐ-CP ngày 05 tháng 3 năm 2020 của Chính phủ về công tác văn thư;</em></strong></p>
-        <p><strong><em>Xét đề nghị của Chánh Văn phòng;</em></strong></p>
+        <p><strong><em>Theo đề nghị của [Thủ trưởng đơn vị tham mưu];</em></strong></p>
         <p style="text-align: center;"><strong>QUYẾT ĐỊNH:</strong></p>
-        <p><strong>Điều 1.</strong> Ban hành kèm theo Quyết định này Quy định về phân công nhiệm vụ công tác và thể thức trình bày văn bản hành chính theo đúng chuẩn Nghị định 30/2020/NĐ-CP của Chính phủ.</p>
+        <p><strong>Điều 1.</strong> [Nội dung quyết định ban hành/phê duyệt quy định, nhiệm vụ hoặc nhân sự...].</p>
         <p><strong>Điều 2.</strong> Quyết định này có hiệu lực thi hành kể từ ngày ký. Các phòng, ban chuyên môn và các đơn vị trực thuộc chịu trách nhiệm thi hành Quyết định này.</p>
-        <p><strong>Điều 3.</strong> Chánh Văn phòng, Thủ trưởng các cơ quan, đơn vị liên quan chịu trách nhiệm thi hành Quyết định này./.</p>
+        <p><strong>Điều 3.</strong> [Chức danh người chịu trách nhiệm thi hành] và các cơ quan, đơn vị, cá nhân có liên quan chịu trách nhiệm thi hành Quyết định này./.</p>
       `,
-      signTitle: "TM. ỦY BAN NHÂN DÂN\nCHỦ TỊCH",
+      signTitle: "TM. [CƠ QUAN BAN HÀNH]\n[CHỨC VỤ NGƯỜI KÝ]",
       signName: "[Họ và tên người ký]",
-      recipients: "Như Điều 3;\nLãnh đạo UBND (để b/c);\nLưu: VT, TH."
+      recipients: "Như Điều 3;\nLãnh đạo cơ quan (để b/c);\nLưu: VT, [Đơn vị soạn thảo]."
     }
   },
   {
@@ -86,25 +86,25 @@ const TEMPLATES: TemplatePreset[] = [
     type: "state",
     badge: "NĐ 30 Phổ biến",
     defaultData: {
-      orgHeader1: "SỞ TƯ PHÁP TỈNH / THÀNH PHỐ",
-      orgHeader2: "VĂN PHÒNG SỞ",
+      orgHeader1: "[CƠ QUAN CẤP TRÊN]",
+      orgHeader2: "[CƠ QUAN BAN HÀNH]",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "CÔNG VĂN",
-      referenceNumber: "Số: .../STP-VP",
-      subject: "V/v phối hợp rà soát, kiểm tra văn bản quy phạm pháp luật",
+      referenceNumber: "Số: .../[TÊN CƠ QUAN]",
+      subject: "V/v [Trích yếu nội dung công văn]",
       bodyHtml: `
-        <p style="text-align: center;"><strong>Kính gửi:</strong> Các Sở, ban, ngành và UBND các quận, huyện, thị xã</p>
-        <p>Thực hiện nhiệm vụ quản lý nhà nước về công tác kiểm tra, rà soát văn bản quy phạm pháp luật năm 2026, Sở Tư pháp đề nghị các cơ quan, đơn vị phối hợp triển khai các nội dung sau:</p>
-        <p>1. Tổ chức tự kiểm tra, rà soát toàn bộ các văn bản hành chính và văn bản quy phạm pháp luật đã ban hành trong kỳ báo cáo.</p>
-        <p>2. Lập danh mục các văn bản cần sửa đổi, bổ sung, thay thế hoặc bãi bỏ để phù hợp với quy định pháp luật hiện hành.</p>
-        <p>3. Báo cáo kết quả rà soát gửi về Sở Tư pháp trước ngày 25 hàng tháng để tổng hợp trình Ủy ban nhân dân cấp có thẩm quyền.</p>
+        <p style="text-align: center;"><strong>Kính gửi:</strong> [Tên cơ quan, tổ chức hoặc cá nhân nhận công văn]</p>
+        <p>Thực hiện [Tên văn bản/nhiệm vụ được giao], [Tên cơ quan ban hành] đề nghị quý cơ quan, đơn vị phối hợp triển khai các nội dung sau:</p>
+        <p>1. Tổ chức rà soát, kiểm tra các nội dung chuyên môn thuộc phạm vi quản lý.</p>
+        <p>2. Lập danh mục các công việc cần triển khai và phân công đơn vị đầu mối thực hiện.</p>
+        <p>3. Báo cáo kết quả về [Tên cơ quan ban hành] trước ngày ... tháng ... năm ... để tổng hợp.</p>
         <p>Rất mong nhận được sự phối hợp chặt chẽ của quý cơ quan, đơn vị./.</p>
       `,
-      signTitle: "KT. GIÁM ĐỐC\nPHÓ GIÁM ĐỐC",
+      signTitle: "KT. [CHỨC VỤ]\n[PHÓ CHỨC VỤ]",
       signName: "[Họ và tên người ký]",
-      recipients: "Như kính gửi;\nUBND Tỉnh/TP (để b/c);\nGiám đốc Sở (để b/c);\nLưu: VT, VBPQ."
+      recipients: "Như kính gửi;\nLãnh đạo cơ quan (để b/c);\nLưu: VT, [Viết tắt đơn vị]."
     }
   },
   {
@@ -114,27 +114,27 @@ const TEMPLATES: TemplatePreset[] = [
     type: "state",
     badge: "NĐ 30 Báo cáo",
     defaultData: {
-      orgHeader1: "ỦY BAN NHÂN DÂN QUẬN / HUYỆN",
-      orgHeader2: "PHÒNG NỘI VỤ",
+      orgHeader1: "[CƠ QUAN CẤP TRÊN]",
+      orgHeader2: "[CƠ QUAN BAN HÀNH]",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "BÁO CÁO",
-      referenceNumber: "Số: .../BC-NV",
-      subject: "Báo cáo tình hình thực hiện công tác cải cách hành chính và chuyển đổi số",
+      referenceNumber: "Số: .../BC-[TÊN CƠ QUAN]",
+      subject: "Báo cáo [Nội dung tình hình thực hiện nhiệm vụ...]",
       bodyHtml: `
-        <p style="text-align: center;"><strong>Kính gửi:</strong> Ủy ban nhân dân quận / huyện</p>
-        <p>Thực hiện kế hoạch công tác cải cách hành chính năm 2026, Phòng Nội vụ báo cáo kết quả triển khai như sau:</p>
+        <p style="text-align: center;"><strong>Kính gửi:</strong> [Tên cơ quan cấp trên/cơ quan nhận báo cáo]</p>
+        <p>Thực hiện kế hoạch công tác năm [Năm], [Tên cơ quan ban hành] báo cáo kết quả triển khai như sau:</p>
         <p><strong>I. TÌNH HÌNH TRIỂN KHAI VÀ KẾT QUẢ ĐẠT ĐƯỢC</strong></p>
-        <p>1. Công tác chỉ đạo, điều hành: Đã tham mưu ban hành đầy đủ các văn bản hướng dẫn và tổ chức giao ban định kỳ kiểm đếm tiến độ.</p>
-        <p>2. Kết quả rà soát thủ tục hành chính: 100% hồ sơ thủ tục được tiếp nhận và số hóa tại bộ phận Một cửa, tỷ lệ giải quyết đúng hạn đạt 99.2%.</p>
-        <p>3. Ứng dụng công nghệ thông tin: Triển khai chữ ký số chuyên dùng và phần mềm chuẩn hóa thể thức văn bản theo Nghị định 30/2020/NĐ-CP.</p>
+        <p>1. Công tác chỉ đạo, điều hành: Đã tham mưu ban hành đầy đủ các văn bản hướng dẫn và tổ chức triển khai đúng tiến độ.</p>
+        <p>2. Kết quả thực hiện nhiệm vụ chuyên môn: 100% hồ sơ công việc được tiếp nhận, tỷ lệ giải quyết đúng hạn đạt [Số liệu % kết quả thực tế].</p>
+        <p>3. Ứng dụng công nghệ thông tin: Thực hiện ký số văn bản và chuẩn hóa thể thức theo Nghị định 30/2020/NĐ-CP.</p>
         <p><strong>II. NHIỆM VỤ TRỌNG TÂM KỲ TIẾP THEO</strong></p>
-        <p>Tiếp tục đôn đốc các phòng, ban chuyên môn nâng cao chất lượng biên tập văn bản hành chính và số hóa hồ sơ lưu trữ.</p>
+        <p>Tiếp tục đôn đốc các bộ phận chuyên môn nâng cao chất lượng công tác chuyên môn và lưu trữ tài liệu.</p>
       `,
-      signTitle: "TRƯỞNG PHÒNG",
+      signTitle: "[CHỨC VỤ NGƯỜI KÝ]",
       signName: "[Họ và tên người ký]",
-      recipients: "Như kính gửi;\nChủ tịch UBND (để b/c);\nLưu: VT, CCHC."
+      recipients: "Như kính gửi;\nLãnh đạo cơ quan (để b/c);\nLưu: VT."
     }
   },
   {
@@ -144,27 +144,27 @@ const TEMPLATES: TemplatePreset[] = [
     type: "state",
     badge: "NĐ 30 Kế hoạch",
     defaultData: {
-      orgHeader1: "ỦY BAN NHÂN DÂN THÀNH PHỐ",
-      orgHeader2: "SỞ THÔNG TIN VÀ TRUYỀN THÔNG",
+      orgHeader1: "[CƠ QUAN CẤP TRÊN]",
+      orgHeader2: "[CƠ QUAN BAN HÀNH]",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "KẾ HOẠCH",
-      referenceNumber: "Số: .../KH-STTTT",
-      subject: "Kế hoạch triển khai ứng dụng công nghệ thông tin và văn thư điện tử",
+      referenceNumber: "Số: .../KH-[TÊN CƠ QUAN]",
+      subject: "Kế hoạch [Nội dung triển khai nhiệm vụ/đề án...]",
       bodyHtml: `
-        <p><strong><em>Căn cứ Quyết định phân công nhiệm vụ của Ủy ban nhân dân thành phố;</em></strong></p>
-        <p>Sở Thông tin và Truyền thông ban hành Kế hoạch triển khai nhiệm vụ với các nội dung trọng tâm như sau:</p>
+        <p><strong><em>Căn cứ [Tên văn bản/quyết định giao nhiệm vụ của cấp có thẩm quyền];</em></strong></p>
+        <p>[Tên cơ quan ban hành] ban hành Kế hoạch triển khai nhiệm vụ với các nội dung trọng tâm như sau:</p>
         <p><strong>I. MỤC ĐÍCH, YÊU CẦU</strong></p>
-        <p>1. Đảm bảo 100% văn bản hành chính gửi nhận trên môi trường điện tử được ký số và trình bày đúng chuẩn thể thức Nghị định 30/2020/NĐ-CP.</p>
-        <p>2. Tăng cường tính liên thông dữ liệu và an toàn thông tin cơ quan nhà nước.</p>
+        <p>1. Đảm bảo các nhiệm vụ được triển khai đồng bộ, đúng tiến độ và đúng quy định pháp luật.</p>
+        <p>2. Phân công rõ trách nhiệm của từng bộ phận, cá nhân trong tổ chức thực hiện.</p>
         <p><strong>II. NỘI DUNG VÀ TIẾN ĐỘ THỰC HIỆN</strong></p>
-        <p>1. Tổ chức tập huấn nghiệp vụ văn thư, lưu trữ điện tử cho cán bộ chuyên trách (Hoàn thành trong Quý II).</p>
-        <p>2. Kiểm tra định kỳ công tác soạn thảo, kiểm soát thể thức văn bản trước khi phát hành.</p>
+        <p>1. [Nội dung công việc 1] (Thời gian hoàn thành: [Thời gian]).</p>
+        <p>2. [Nội dung công việc 2] (Thời gian hoàn thành: [Thời gian]).</p>
       `,
-      signTitle: "GIÁM ĐỐC",
+      signTitle: "[CHỨC VỤ NGƯỜI KÝ]",
       signName: "[Họ và tên người ký]",
-      recipients: "UBND Thành phố (để b/c);\nCác Sở, ban, ngành;\nLưu: VT, CNTT."
+      recipients: "[Cơ quan cấp trên] (để b/c);\nCác đơn vị phối hợp;\nLưu: VT."
     }
   },
   {
@@ -174,24 +174,24 @@ const TEMPLATES: TemplatePreset[] = [
     type: "state",
     badge: "NĐ 30 Tờ trình",
     defaultData: {
-      orgHeader1: "ỦY BAN NHÂN DÂN THÀNH PHỐ",
-      orgHeader2: "SỞ TÀI CHÍNH",
+      orgHeader1: "[CƠ QUAN CẤP TRÊN]",
+      orgHeader2: "[CƠ QUAN BAN HÀNH]",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "TỜ TRÌNH",
-      referenceNumber: "Số: .../TTr-STC",
-      subject: "V/v phê duyệt dự toán kinh phí nâng cấp hệ thống quản lý văn bản và điều hành",
+      referenceNumber: "Số: .../TTr-[TÊN CƠ QUAN]",
+      subject: "V/v phê duyệt [Nội dung chủ trương/đề án/dự toán...]",
       bodyHtml: `
-        <p style="text-align: center;"><strong>Kính gửi:</strong> Ủy ban nhân dân thành phố</p>
-        <p><strong><em>Căn cứ Luật Ngân sách nhà nước ngày 25 tháng 6 năm 2015;</em></strong></p>
-        <p><strong><em>Căn cứ các quyết định phân bổ dự toán của Hội đồng nhân dân thành phố;</em></strong></p>
-        <p>Sở Tài chính kính trình Ủy ban nhân dân thành phố xem xét, phê duyệt chủ trương và dự toán kinh phí thực hiện đề án nâng cấp phần mềm văn thư điện tử chuẩn hóa theo Nghị định 30/2020/NĐ-CP với các nội dung chi tiết kèm theo.</p>
-        <p>Kính trình Ủy ban nhân dân thành phố xem xét, quyết định./.</p>
+        <p style="text-align: center;"><strong>Kính gửi:</strong> [Tên cơ quan/Cấp có thẩm quyền phê duyệt]</p>
+        <p><strong><em>Căn cứ [Tên căn cứ pháp lý quy định thẩm quyền phê duyệt];</em></strong></p>
+        <p><strong><em>Căn cứ [Tên văn bản/quy định chuyên ngành liên quan];</em></strong></p>
+        <p>[Tên cơ quan ban hành] kính trình [Tên cấp có thẩm quyền] xem xét, phê duyệt [Nội dung chủ trương/đề án] với các nội dung chi tiết kèm theo.</p>
+        <p>Kính trình [Tên cấp có thẩm quyền] xem xét, quyết định./.</p>
       `,
-      signTitle: "GIÁM ĐỐC",
+      signTitle: "[CHỨC VỤ NGƯỜI KÝ]",
       signName: "[Họ và tên người ký]",
-      recipients: "Như kính gửi;\nChủ tịch UBND TP (để b/c);\nLưu: VT, HCSN."
+      recipients: "Như kính gửi;\nLãnh đạo cơ quan (để b/c);\nLưu: VT."
     }
   },
   {
@@ -201,23 +201,23 @@ const TEMPLATES: TemplatePreset[] = [
     type: "state",
     badge: "NĐ 30 Thông báo",
     defaultData: {
-      orgHeader1: "ỦY BAN NHÂN DÂN THÀNH PHỐ",
-      orgHeader2: "VĂN PHÒNG ỦY BAN",
+      orgHeader1: "[CƠ QUAN CẤP TRÊN]",
+      orgHeader2: "[CƠ QUAN BAN HÀNH]",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "THÔNG BÁO",
-      referenceNumber: "Số: .../TB-VP",
-      subject: "Ý kiến kết luận của Chủ tịch Ủy ban nhân dân tại phiên họp thường kỳ tháng 10",
+      referenceNumber: "Số: .../TB-[TÊN CƠ QUAN]",
+      subject: "Ý kiến kết luận của [Chức danh người chủ trì] tại cuộc họp [Nội dung cuộc họp]",
       bodyHtml: `
-        <p>Ngày ... tháng ... năm ..., tại Trụ sở UBND thành phố, đồng chí Chủ tịch UBND đã chủ trì phiên họp giao ban thường kỳ. Sau khi nghe báo cáo và ý kiến thảo luận của các đại biểu, Chủ tịch UBND thành phố kết luận như sau:</p>
-        <p>1. Đánh giá cao nỗ lực của các cơ quan, đơn vị trong việc thực hiện mục tiêu kinh tế - xã hội tháng vừa qua.</p>
-        <p>2. Yêu cầu Thủ trưởng các Sở, ban, ngành khẩn trương rà soát các nhiệm vụ chậm tiến độ, đặc biệt là công tác cải cách thủ tục hành chính và chuẩn hóa quy trình văn thư.</p>
-        <p>Văn phòng UBND thành phố thông báo để các cơ quan, đơn vị biết và nghiêm túc triển khai thực hiện./.</p>
+        <p>Ngày ... tháng ... năm ..., tại [Địa điểm], đồng chí [Họ tên và chức danh] đã chủ trì cuộc họp [Tên cuộc họp]. Sau khi nghe báo cáo và ý kiến thảo luận của các đại biểu, đồng chí [Chức danh] kết luận như sau:</p>
+        <p>1. Đánh giá chung về kết quả triển khai công việc trong thời gian qua.</p>
+        <p>2. Yêu cầu các bộ phận, đơn vị khẩn trương triển khai các nhiệm vụ trọng tâm được giao.</p>
+        <p>[Tên cơ quan ban hành] thông báo để các đơn vị, cá nhân biết và thực hiện./.</p>
       `,
-      signTitle: "CHÁNH VĂN PHÒNG",
+      signTitle: "[CHỨC VỤ NGƯỜI KÝ]",
       signName: "[Họ và tên người ký]",
-      recipients: "Chủ tịch, các Phó CT UBND TP;\nCác Sở, ban, ngành;\nLưu: VT, TH."
+      recipients: "Lãnh đạo cơ quan (để b/c);\nCác đơn vị trực thuộc;\nLưu: VT."
     }
   },
   {
@@ -227,25 +227,25 @@ const TEMPLATES: TemplatePreset[] = [
     type: "party",
     badge: "HD 05 Đảng",
     defaultData: {
-      orgHeader1: "ĐẢNG BỘ TỈNH / THÀNH PHỐ",
-      orgHeader2: "BAN CHẤP HÀNH ĐẢNG BỘ",
+      orgHeader1: "[CẤP ỦY CẤP TRÊN]",
+      orgHeader2: "[CẤP ỦY BAN HÀNH]",
       nationalHeader1: "ĐẢNG CỘNG SẢN VIỆT NAM",
       nationalHeader2: "",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "NGHỊ QUYẾT",
-      referenceNumber: "Số: ...-NQ/TU",
-      subject: "Nghị quyết Hội nghị Ban Chấp hành Đảng bộ về phương hướng nhiệm vụ trọng tâm",
+      referenceNumber: "Số: ...-NQ/[TÊN CẤP ỦY]",
+      subject: "Nghị quyết [Tên cuộc họp/Hội nghị] về [Nội dung trọng tâm]",
       bodyHtml: `
         <p><strong><em>Căn cứ Điều lệ Đảng Cộng sản Việt Nam;</em></strong></p>
-        <p><strong><em>Căn cứ Quy chế làm việc của Ban Chấp hành Đảng bộ khóa mới;</em></strong></p>
-        <p style="text-align: center;"><strong>BAN CHẤP HÀNH ĐẢNG BỘ NGHỊ QUYẾT:</strong></p>
-        <p><strong>1. Đánh giá tình hình:</strong> Toàn Đảng bộ đã giữ vững nguyên tắc tập trung dân chủ, đoàn kết, lãnh đạo thực hiện thắng lợi các mục tiêu phát triển kinh tế, xã hội và quốc phòng an ninh.</p>
-        <p><strong>2. Mục tiêu, nhiệm vụ trọng tâm:</strong> Tiếp tục đổi mới phương thức lãnh đạo của Đảng, nâng cao năng lực lãnh đạo và sức chiến đấu của các tổ chức cơ sở đảng.</p>
+        <p><strong><em>Căn cứ Quy chế làm việc của [Tên cấp ủy ban hành];</em></strong></p>
+        <p style="text-align: center;"><strong>[TÊN CẤP ỦY] NGHỊ QUYẾT:</strong></p>
+        <p><strong>1. Đánh giá tình hình:</strong> [Nội dung đánh giá tình hình thực hiện nhiệm vụ political/xây dựng Đảng...].</p>
+        <p><strong>2. Mục tiêu, nhiệm vụ trọng tâm:</strong> [Mục tiêu và các nhiệm vụ chủ yếu kỳ tới...].</p>
         <p><strong>3. Tổ chức thực hiện:</strong> Các cấp ủy, tổ chức đảng trực thuộc chịu trách nhiệm quán triệt và xây dựng chương trình hành động thực hiện nghiêm túc Nghị quyết này./.</p>
       `,
-      signTitle: "T/M BAN CHẤP HÀNH\nBÍ THƯ",
+      signTitle: "T/M [CẤP ỦY BAN HÀNH]\n[BÍ THƯ / PHÓ BÍ THƯ]",
       signName: "[Họ và tên người ký]",
-      recipients: "Các đảng bộ, chi bộ trực thuộc;\nCác ban của Đảng ủy;\nLưu: Văn phòng."
+      recipients: "Các chi bộ, đảng bộ trực thuộc;\nCác ban của cấp ủy;\nLưu: Văn phòng."
     }
   },
   {
@@ -255,23 +255,23 @@ const TEMPLATES: TemplatePreset[] = [
     type: "party",
     badge: "HD 05 Đảng",
     defaultData: {
-      orgHeader1: "ĐẢNG BỘ TỈNH / THÀNH PHỐ",
+      orgHeader1: "[CẤP ỦY CẤP TRÊN]",
       orgHeader2: "BAN THƯỜNG VỤ",
       nationalHeader1: "ĐẢNG CỘNG SẢN VIỆT NAM",
       nationalHeader2: "",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "CHỈ THỊ",
-      referenceNumber: "Số: ...-CT/TU",
-      subject: "Về tăng cường kỷ luật, kỷ cương và trách nhiệm nêu gương của cán bộ, đảng viên",
+      referenceNumber: "Số: ...-CT/[TÊN CẤP ỦY]",
+      subject: "Về [Nội dung chỉ đạo trọng tâm của cấp ủy]",
       bodyHtml: `
-        <p>Để nâng cao hiệu quả công tác xây dựng, chỉnh đốn Đảng, Ban Thường vụ Tỉnh ủy/Thành ủy yêu cầu các cấp ủy, tổ chức đảng triển khai các nhiệm vụ trọng tâm sau:</p>
-        <p>1. Tăng cường công tác giáo dục chính trị tư tưởng, siết chặt kỷ luật, kỷ cương trong toàn hệ thống chính trị.</p>
-        <p>2. Phát huy vai trò tiên phong, gương mẫu của người đứng đầu cấp ủy, cơ quan, đơn vị trong thực thi nhiệm vụ.</p>
-        <p>3. Ban Tuyên giáo và Ủy ban Kiểm tra tăng cường giám sát việc thực hiện Chỉ thị này./.</p>
+        <p>Để [Mục đích của Chỉ thị], Ban Thường vụ [Tên cấp ủy] yêu cầu các cấp ủy, tổ chức đảng triển khai các nhiệm vụ trọng tâm sau:</p>
+        <p>1. Tăng cường công tác giáo dục chính trị tư tưởng, siết chặt kỷ luật, kỷ cương trong toàn hệ thống.</p>
+        <p>2. Phát huy vai trò tiên phong, gương mẫu của người đứng đầu cấp ủy, cơ quan, đơn vị.</p>
+        <p>3. Các ban của cấp ủy tăng cường kiểm tra, giám sát việc thực hiện Chỉ thị này./.</p>
       `,
-      signTitle: "T/M BAN THƯỜNG VỤ\nBÍ THƯ",
+      signTitle: "T/M BAN THƯỜNG VỤ\n[BÍ THƯ / PHÓ BÍ THƯ]",
       signName: "[Họ và tên người ký]",
-      recipients: "Các huyện ủy, quận ủy trực thuộc;\nCác ban cán sự đảng, đảng đoàn;\nLưu: Văn phòng."
+      recipients: "Các cấp ủy trực thuộc;\nCác ban cán sự đảng, đảng đoàn;\nLưu: Văn phòng."
     }
   },
   {
@@ -281,24 +281,24 @@ const TEMPLATES: TemplatePreset[] = [
     type: "party",
     badge: "HD 05 Đảng",
     defaultData: {
-      orgHeader1: "BAN TỔ CHỨC TỈNH ỦY / THÀNH ỦY",
-      orgHeader2: "BAN TỔ CHỨC",
+      orgHeader1: "[CẤP ỦY CẤP TRÊN]",
+      orgHeader2: "[BAN CHUYÊN MÔN CỦA ĐẢNG]",
       nationalHeader1: "ĐẢNG CỘNG SẢN VIỆT NAM",
       nationalHeader2: "",
       locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
       documentType: "HƯỚNG DẪN",
-      referenceNumber: "Số: ...-HD/BTCTU",
-      subject: "Hướng dẫn một số nội dung về công tác đánh giá, xếp loại chất lượng tổ chức đảng và đảng viên",
+      referenceNumber: "Số: ...-HD/[TÊN BAN]",
+      subject: "Hướng dẫn một số nội dung về [Nội dung nghiệp vụ công tác Đảng]",
       bodyHtml: `
-        <p><strong><em>Căn cứ Quy định của Ban Bí thư về kiểm điểm, đánh giá, xếp loại chất lượng hằng năm đối với tổ chức đảng, đảng viên;</em></strong></p>
-        <p>Ban Tổ chức hướng dẫn cụ thể một số nội dung sau:</p>
-        <p>1. Đối tượng và tiêu chí đánh giá chất lượng tổ chức cơ sở đảng.</p>
-        <p>2. Quy trình các bước thực hiện kiểm điểm tự phê bình và phê bình.</p>
-        <p>3. Hồ sơ, biểu mẫu báo cáo kết quả đánh giá gửi về Ban Tổ chức theo quy định./.</p>
+        <p><strong><em>Căn cứ [Tên quy định/quyết định của Trung ương hoặc cấp ủy liên quan];</em></strong></p>
+        <p>[Tên ban chuyên môn] hướng dẫn cụ thể một số nội dung sau:</p>
+        <p>1. Đối tượng và phạm vi áp dụng.</p>
+        <p>2. Quy trình các bước thực hiện nghiệp vụ.</p>
+        <p>3. Hồ sơ và chế độ báo cáo gửi về [Tên ban chuyên môn] theo quy định./.</p>
       `,
       signTitle: "TRƯỞNG BAN",
       signName: "[Họ và tên người ký]",
-      recipients: "Các cấp ủy trực thuộc;\nLưu: Ban Tổ chức."
+      recipients: "Các cấp ủy trực thuộc;\nLưu: [Tên ban chuyên môn]."
     }
   },
   {
@@ -632,7 +632,7 @@ export default function App() {
         nationalHeader1: isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
         nationalHeader2: (isParty ? "" : "Độc lập - Tự do - Hạnh phúc") as "" | "Độc lập - Tự do - Hạnh phúc",
         fontFamily: "Times New Roman",
-        fontSize: 13,
+        fontSize: isParty ? 14 : 13,
         orgHeader1: doc.orgHeader1,
         orgHeader2: doc.orgHeader2,
         locationAndDate: doc.locationAndDate,
