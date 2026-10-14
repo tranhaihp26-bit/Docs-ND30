@@ -391,9 +391,9 @@ async function main() {
   });
 
   // ----------------------------------------------------------------------
-  // 22. Profile định dạng riêng NĐ30 (13pt) vs HD05 (14pt)
+  // 22. Profile định dạng riêng NĐ30 (13pt) vs HD05 (14pt) - Kiểm tra OOXML thực tế
   // ----------------------------------------------------------------------
-  await runTest("TEST-22", "Style profiles phân biệt chính xác NĐ 30 (13pt) và HD 05 (14pt)", () => {
+  await runTest("TEST-22", "Style profiles phân biệt chính xác NĐ 30 (13pt) và HD 05 (14pt) trong OOXML thực tế", async () => {
     const adminProfile = getStyleProfile("administrative");
     const partyProfile = getStyleProfile("party");
 
@@ -401,7 +401,36 @@ async function main() {
     assert.equal(adminProfile.documentTypeFontSize, 14, "NĐ 30 cỡ chữ tên loại văn bản phải là 14pt");
 
     assert.equal(partyProfile.bodyFontSize, 14, "HD 05 cỡ chữ nội dung phải là 14pt");
-    assert.equal(partyProfile.documentTypeFontSize, 15, "HD 05 cỡ chữ tên loại văn bản phải là 15pt");
+    assert.equal(partyProfile.orgHeader1FontSize, 14, "HD 05 cỡ chữ cơ quan cấp trên phải là 14pt");
+    assert.equal(partyProfile.nationalHeader1FontSize, 15, "HD 05 cỡ chữ tiêu đề Đảng phải là 15pt");
+
+    // Đọc OOXML thực tế từ file DOCX sinh ra
+    const sampleParty: DocumentFormatType = {
+      regime: "party",
+      nationalHeader1: "ĐẢNG CỘNG SẢN VIỆT NAM",
+      nationalHeader2: "",
+      fontFamily: "Times New Roman",
+      fontSize: 14,
+      orgHeader1: "ĐẢNG BỘ TỈNH HẢI PHÒNG",
+      orgHeader2: "BAN THƯỜNG VỤ",
+      locationAndDate: "Hải Phòng, ngày 14 tháng 10 năm 2026",
+      documentType: "NGHỊ QUYẾT",
+      referenceNumber: "Số: 12-NQ/TU",
+      subject: "Nghị quyết hội nghị lần thứ 5 Ban Chấp hành Đảng bộ",
+      bodyHtml: `<p>Nội dung nghị quyết Đảng...</p>`,
+      signTitle: "T/M BAN THƯỜNG VỤ\nBÍ THƯ",
+      signName: "Nguyễn Văn A",
+      recipients: "Các chi bộ trực thuộc;\nLưu: VP."
+    };
+
+    const docParty = generateND30DocxDocument(sampleParty);
+    const bufParty = await Packer.toBuffer(docParty);
+    const zipParty = await JSZip.loadAsync(bufParty);
+    const xmlParty = await zipParty.file("word/document.xml")?.async("string");
+
+    assert.ok(xmlParty, "Đọc được document.xml của tài liệu Đảng");
+    assert.ok(xmlParty.includes('w:sz w:val="28"') || xmlParty.includes('w:szCs w:val="28"'), "OOXML văn bản Đảng phải chứa cỡ chữ 14pt (val=28)");
+    assert.ok(xmlParty.includes('w:sz w:val="30"') || xmlParty.includes('w:szCs w:val="30"'), "OOXML tiêu đề Đảng phải chứa cỡ chữ 15pt (val=30)");
   });
 
   // ----------------------------------------------------------------------
@@ -447,12 +476,13 @@ async function main() {
       }
     }
     assert.ok(foundPageNum, "Tệp header XML phải chứa trường đánh số trang động PAGE");
+    console.log("   [F04 VISUAL NOT VERIFIED]: Cấu hình OOXML chuẩn xác. Kiểm tra trực quan bằng ứng dụng MS Word để xác nhận ngắt trang.");
   });
 
   // ----------------------------------------------------------------------
-  // 24. Chuyển đổi danh sách (ol/ul) và ngắt trang bảng (cantSplit, tableHeader)
+  // 24. Chuyển đổi danh sách automatic numbering và ngắt trang bảng
   // ----------------------------------------------------------------------
-  await runTest("TEST-24", "Xử lý danh sách có số tự động và thuộc tính ngắt trang bảng cantSplit", async () => {
+  await runTest("TEST-24", "Xử lý danh sách có numbering definitions (word/numbering.xml) và thuộc tính ngắt trang bảng", async () => {
     const sampleListAndTable: DocumentFormatType = {
       regime: "administrative",
       nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
@@ -485,17 +515,23 @@ async function main() {
     const buffer = await Packer.toBuffer(doc);
     const zip = await JSZip.loadAsync(buffer);
 
+    // 1. Kiểm tra word/numbering.xml tồn tại
+    const numberingXml = await zip.file("word/numbering.xml")?.async("string");
+    assert.ok(numberingXml, "Tệp DOCX sinh ra phải chứa word/numbering.xml cho danh sách tự động");
+
+    // 2. Kiểm tra word/document.xml chứa w:numPr
     const docXml = await zip.file("word/document.xml")?.async("string");
     assert.ok(docXml, "Phải đọc được document.xml");
+    assert.ok(docXml.includes("w:numPr"), "Danh sách ol phải sử dụng w:numPr (Word automatic numbering)");
     assert.ok(docXml.includes("w:cantSplit"), "Bảng dữ liệu phải có thuộc tính w:cantSplit chống ngắt dòng bất hợp lý");
     assert.ok(docXml.includes("w:tblHeader"), "Hàng tiêu đề bảng phải có thuộc tính w:tblHeader để lặp lại khi sang trang");
 
     const textResult = await mammoth.extractRawText({ buffer });
-    assert.ok(textResult.value.includes("1. Kiểm tra thể thức văn bản"), "Danh sách đánh số phải giữ nguyên thứ tự và tiền tố số");
+    assert.ok(textResult.value.includes("Kiểm tra thể thức văn bản"), "Danh sách đánh số phải chứa trọn vẹn nội dung mục");
   });
 
   // ----------------------------------------------------------------------
-  // 25. Kiểm thử tài liệu dài 5 trang (Multi-page Fixture F03)
+  // 25. Kiểm thử tài liệu dài 5 trang (Multi-page Fixture F03/F04)
   // ----------------------------------------------------------------------
   await runTest("TEST-25", "Tạo và xác minh tài liệu báo cáo 5 trang chứa tiêu đề, bảng biểu và danh sách", async () => {
     let longBody = `<p>Kính gửi: Ủy ban nhân dân thành phố</p>`;
@@ -507,7 +543,7 @@ async function main() {
     longBody += `<ol><li>Dự án số hóa văn thư lưu trữ</li><li>Dự án ứng dụng chữ ký số chuyên dùng</li></ol>`;
     longBody += `<table><tr><th>STT</th><th>Tên dự án</th><th>Trạng thái</th></tr>`;
     for (let j = 1; j <= 15; j++) {
-      longBody += `<tr><td>${j}</td><td>Dự án công nghệ số ${j}</td><td>Hoàn thành 100%</td></tr>`;
+      longBody += `<tr><td>${j}</td><td>Dự án công nghệ số ${j}</td><td>Hoàn thành [Đạt tiến độ]</td></tr>`;
     }
     longBody += `</table>`;
 
@@ -533,9 +569,15 @@ async function main() {
     const buffer = await Packer.toBuffer(doc);
     assert.ok(buffer.length > 10000, "File Word 5 trang sinh ra phải có kích thước dung lượng hợp lệ (>10KB)");
 
+    const zip = await JSZip.loadAsync(buffer);
+    const docXml = await zip.file("word/document.xml")?.async("string");
+    assert.ok(docXml, "Đọc được document.xml của tài liệu 5 trang");
+    assert.ok(docXml.includes("w:keepNext"), "Tiêu đề H1/H2 phải có thuộc tính w:keepNext chống mồ côi tiêu đề");
+
     const textResult = await mammoth.extractRawText({ buffer });
     assert.ok(textResult.value.includes("Đoạn văn bản thứ 20"), "Phải giữ trọn vẹn 20 đoạn văn bản không bị xén cụt");
     assert.ok(textResult.value.includes("Dự án công nghệ số 15"), "Phải giữ trọn vẹn 15 hàng dữ liệu trong bảng");
+    console.log("   [F04 VISUAL NOT VERIFIED]: Cấu hình ngắt trang OOXML w:keepNext, w:cantSplit, w:tblHeader đạt chuẩn. Kiểm tra hiển thị bằng MS Word/LibreOffice.");
   });
 
   // ----------------------------------------------------------------------

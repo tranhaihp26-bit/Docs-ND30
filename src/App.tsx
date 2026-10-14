@@ -127,7 +127,7 @@ const TEMPLATES: TemplatePreset[] = [
         <p>Thực hiện kế hoạch công tác năm [Năm], [Tên cơ quan ban hành] báo cáo kết quả triển khai như sau:</p>
         <p><strong>I. TÌNH HÌNH TRIỂN KHAI VÀ KẾT QUẢ ĐẠT ĐƯỢC</strong></p>
         <p>1. Công tác chỉ đạo, điều hành: Đã tham mưu ban hành đầy đủ các văn bản hướng dẫn và tổ chức triển khai đúng tiến độ.</p>
-        <p>2. Kết quả thực hiện nhiệm vụ chuyên môn: 100% hồ sơ công việc được tiếp nhận, tỷ lệ giải quyết đúng hạn đạt [Số liệu % kết quả thực tế].</p>
+        <p>2. Kết quả thực hiện nhiệm vụ chuyên môn: Các hồ sơ công việc được tiếp nhận, xử lý, tỷ lệ giải quyết đúng hạn đạt [Số liệu % kết quả thực tế].</p>
         <p>3. Ứng dụng công nghệ thông tin: Thực hiện ký số văn bản và chuẩn hóa thể thức theo Nghị định 30/2020/NĐ-CP.</p>
         <p><strong>II. NHIỆM VỤ TRỌNG TÂM KỲ TIẾP THEO</strong></p>
         <p>Tiếp tục đôn đốc các bộ phận chuyên môn nâng cao chất lượng công tác chuyên môn và lưu trữ tài liệu.</p>

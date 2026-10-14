@@ -107,10 +107,11 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
   };
 
   // ACTION 2: Chèn Tên cơ quan ban hành văn bản
+  // ACTION 2: Chèn Tên cơ quan ban hành văn bản
   const insertOrgHeader = () => {
-    const parentOrg = isParty ? "ĐẢNG BỘ TỈNH/THÀNH PHỐ" : "UBND TỈNH / THÀNH PHỐ...";
-    const org = isParty ? "BAN THƯỜNG VỤ / VĂN PHÒNG" : "VĂN PHÒNG / SỞ BAN NGÀNH...";
-    const refNum = isParty ? "Số: 01-NQ/TU" : "Số: 01/QĐ-UBND";
+    const parentOrg = isParty ? "[TÊN CẤP ỦY CẤP TRÊN]" : "[TÊN CƠ QUAN CẤP TRÊN]";
+    const org = isParty ? "[TÊN CẤP ỦY BAN HÀNH]" : "[TÊN CƠ QUAN BAN HÀNH]";
+    const refNum = isParty ? "Số: ...-NQ/[MÃ CẤP ỦY]" : "Số: .../[MÃ VĂN BẢN]";
 
     const htmlSnippet = `
       <p style="text-align: center;">${parentOrg}</p>
@@ -143,8 +144,8 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
   // ACTION 3: Chèn Căn cứ pháp lý
   const insertLegalGround = () => {
     const groundText = isParty
-      ? `<p><strong><em>Căn cứ Điều lệ Đảng Cộng sản Việt Nam;</em></strong></p><p><strong><em>Căn cứ Quy chế làm việc của Ban Chấp hành...;</em></strong></p>`
-      : `<p><strong><em>Căn cứ Luật Tổ chức chính quyền địa phương ngày 19 tháng 6 năm 2015;</em></strong></p><p><strong><em>Căn cứ Nghị định số 30/2020/NĐ-CP ngày 05 tháng 3 năm 2020 của Chính phủ về công tác văn thư;</em></strong></p><p><strong><em>Xét đề nghị của...;</em></strong></p>`;
+      ? `<p><strong><em>Căn cứ [Tên quy định/quyết định quy định chức năng, nhiệm vụ của cấp ủy];</em></strong></p><p><strong><em>Căn cứ [Tên văn bản/chỉ thị chỉ đạo liên quan...];</em></strong></p>`
+      : `<p><strong><em>Căn cứ [Tên văn bản quy phạm pháp luật quy định chức năng, nhiệm vụ của cơ quan...];</em></strong></p><p><strong><em>Căn cứ Nghị định số 30/2020/NĐ-CP ngày 05 tháng 3 năm 2020 của Chính phủ về công tác văn thư;</em></strong></p><p><strong><em>Theo đề nghị của [Tên đơn vị tham mưu]...;</em></strong></p>`;
     editor.chain().focus().insertContent(groundText).run();
   };
 
@@ -160,8 +161,8 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
 
   // ACTION 5: Chèn Khối chữ ký & Nơi nhận chuẩn NĐ 30
   const insertSignatureBlock = () => {
-    const signTitle = isParty ? "T/M BAN THƯỜNG VỤ<br/>BÍ THƯ" : "TM. ỦY BAN NHÂN DÂN<br/>CHỦ TỊCH";
-    const recipients = isParty ? "Như Điều...;<br/>Lưu: VT, Ban Tổ chức." : "Như Điều...;<br/>Lưu: VT, TH.";
+    const signTitle = isParty ? "T/M [CẤP ỦY BAN HÀNH]<br/>[CHỨC VỤ NGƯỜI KÝ]" : "TM. [CƠ QUAN BAN HÀNH]<br/>[CHỨC VỤ NGƯỜI KÝ]";
+    const recipients = isParty ? "Như [thành phần];<br/>Lưu: VT, [Đơn vị]." : "Như [thành phần];<br/>Lưu: VT, [Đơn vị].";
 
     const htmlSnippet = `
       <br/>

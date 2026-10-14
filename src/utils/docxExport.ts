@@ -19,7 +19,7 @@
 import { 
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
   WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip, PageOrientation,
-  Header, PageNumber
+  Header, PageNumber, LevelFormat
 } from "docx";
 import type { DocumentFormatType } from "../shared/schemas/document.schema.ts";
 
@@ -54,13 +54,13 @@ export function getStyleProfile(regime: "administrative" | "party" = "administra
       heading2FontSize: 14,
       heading3FontSize: 14,
       documentTypeFontSize: 15,
-      orgHeader1FontSize: 12,
-      orgHeader2FontSize: 13,
-      nationalHeader1FontSize: 14,
+      orgHeader1FontSize: 14, // 14pt cho tên cơ quan cấp trên
+      orgHeader2FontSize: 14, // 14pt cho tên cơ quan ban hành
+      nationalHeader1FontSize: 15, // 15pt cho ĐẢNG CỘNG SẢN VIỆT NAM
       nationalHeader2FontSize: 0,
-      signTitleFontSize: 14,
-      signNameFontSize: 14,
-      pageNumberFontSize: 14,
+      signTitleFontSize: 14, // 14pt cho chức danh người ký
+      signNameFontSize: 14, // 14pt cho tên người ký
+      pageNumberFontSize: 14, // 14pt cho số trang
     };
   }
   return {
@@ -266,18 +266,17 @@ export function convertHtmlToDocxElements(
 
       // Xử lý danh sách (ul/ol)
       if (tagName === "ul" || tagName === "ol") {
-        Array.from(child.children).forEach((li, idx) => {
+        Array.from(child.children).forEach((li) => {
           const inlineRuns = parseInlineNodes(li, defaultHalfPoints);
-          const prefix = tagName === "ol" ? `${idx + 1}. ` : undefined;
 
           elements.push(
             new Paragraph({
               bullet: tagName === "ul" ? { level: 0 } : undefined,
+              numbering: tagName === "ol" ? { reference: "nd30-numbered-list", level: 0 } : undefined,
               indent: { left: 720 },
               spacing: { before: 40, after: 40, line: 276 },
-              children: [
-                ...(prefix ? [new TextRun({ text: prefix, font: "Times New Roman", size: defaultHalfPoints, bold: true })] : []),
-                ...inlineRuns
+              children: inlineRuns.length > 0 ? inlineRuns : [
+                new TextRun({ text: li.textContent?.trim() || "", font: "Times New Roman", size: defaultHalfPoints })
               ],
             })
           );
@@ -368,16 +367,15 @@ export function convertHtmlToDocxElements(
     if (trimmed.toLowerCase().startsWith("<ol") || trimmed.toLowerCase().startsWith("<ul")) {
       const isOl = trimmed.toLowerCase().startsWith("<ol");
       const liMatches = trimmed.match(/<li[\s\S]*?<\/li>/gi) || [];
-      liMatches.forEach((liHtml, idx) => {
+      liMatches.forEach((liHtml) => {
         const text = liHtml.replace(/<[^>]*>/g, "").trim();
-        const prefix = isOl ? `${idx + 1}. ` : undefined;
         elements.push(
           new Paragraph({
             bullet: !isOl ? { level: 0 } : undefined,
+            numbering: isOl ? { reference: "nd30-numbered-list", level: 0 } : undefined,
             indent: { left: 720 },
             spacing: { before: 40, after: 40, line: 276 },
             children: [
-              ...(prefix ? [new TextRun({ text: prefix, font: "Times New Roman", size: defaultHalfPoints, bold: true })] : []),
               new TextRun({ text, font: "Times New Roman", size: defaultHalfPoints }),
             ],
           })
@@ -482,6 +480,29 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
           },
         },
       },
+    },
+    numbering: {
+      config: [
+        {
+          reference: "nd30-numbered-list",
+          levels: [
+            {
+              level: 0,
+              format: LevelFormat.DECIMAL,
+              text: "%1.",
+              alignment: AlignmentType.LEFT,
+              style: {
+                paragraph: {
+                  indent: { left: 720, hanging: 360 },
+                },
+                run: {
+                  font: "Times New Roman",
+                },
+              },
+            },
+          ],
+        },
+      ],
     },
     sections: [
       {
