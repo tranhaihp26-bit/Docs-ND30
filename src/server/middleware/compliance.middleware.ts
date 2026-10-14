@@ -56,13 +56,13 @@ export function extractLocation(rawDateStr?: string): string {
  * Đảm bảo bắt đầu bằng tiền tố "Số: "
  */
 export function normalizeReferenceNumber(rawNum?: string, docType: string = "CV"): string {
-  if (!rawNum || typeof rawNum !== "string" || !rawNum.trim()) {
+  if (!rawNum || typeof rawNum !== "string" || !rawNum.trim() || rawNum.includes("...")) {
     const acronym = docType
       .split(/\s+/)
       .map(w => w[0]?.toUpperCase())
       .filter(Boolean)
       .join("") || "CV";
-    return `Số: 01/${acronym}-VP`;
+    return `Số: .../${acronym}`;
   }
 
   let clean = rawNum.trim();
@@ -113,12 +113,8 @@ export function sanitizeBodyHtml(rawHtml?: string): string {
  * 
  * Lớp này sẽ:
  * 1. Ghi đè (Override) toàn bộ các trường thể thức bắt buộc (Quốc hiệu, Tiêu ngữ, Font, Size).
- * 2. Tự động khắc phục các lỗi ảo giác (Hallucination) của AI ở trường ngày tháng, số ký hiệu.
+ * 2. Giữ nguyên tính trung thực, không tự bịa đặt thông tin nghiệp vụ giả (người ký, số ký hiệu, cơ quan).
  * 3. Chạy qua Zod Schema Validation để bảo đảm tính đúng đắn và an toàn kiểu dữ liệu.
- * 
- * @param rawAiJson Dữ liệu JSON thô nhận được từ Gemini API hoặc client
- * @param regime Chế độ thể thức: 'administrative' (NĐ 30) hoặc 'party' (HD 05)
- * @returns Object tuân thủ chuẩn DocumentFormatType đã được validate
  */
 export function enforceND30Standards(
   rawAiJson: any,
@@ -133,7 +129,6 @@ export function enforceND30Standards(
     : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
 
   // 2. RULE OVERRIDE: Tiêu ngữ (Dòng 2)
-  // Văn bản Đảng theo Hướng dẫn số 05-HD/VPTW không có tiêu ngữ Độc lập - Tự do - Hạnh phúc
   const nationalHeader2 = isParty ? "" : ("Độc lập - Tự do - Hạnh phúc" as const);
 
   // 3. RULE OVERRIDE: Phông chữ & Cỡ chữ bắt buộc (NĐ 30 Điều 8)
@@ -143,31 +138,37 @@ export function enforceND30Standards(
   // 4. RULE OVERRIDE: Loại văn bản chuẩn hóa
   const documentType = (source.documentType || (isParty ? "NGHỊ QUYẾT" : "CÔNG VĂN")).toString().trim().toUpperCase();
 
-  // 5. RULE REPAIR: Số và ký hiệu văn bản
+  // 5. RULE REPAIR: Số và ký hiệu văn bản (Không tự bịa số giả)
   const referenceNumber = normalizeReferenceNumber(source.referenceNumber, documentType);
 
-  // 6. RULE REPAIR: Địa danh và Ngày tháng năm
+  // 6. RULE REPAIR: Địa danh và Ngày tháng năm (Không tự bịa ngày nếu không có)
   let locationAndDate = (source.locationAndDate || "").toString().trim();
-  if (!LOCATION_AND_DATE_REGEX.test(locationAndDate) || locationAndDate.length < 10) {
-    // Nếu AI bịa ngày tháng không đúng định dạng chuẩn NĐ 30, trích xuất địa danh và áp dụng ngày thực tế chuẩn
+  if (!locationAndDate || locationAndDate === "[Địa danh], ngày ... tháng ... năm ...") {
+    locationAndDate = "[Địa danh], ngày ... tháng ... năm ...";
+  } else if (!LOCATION_AND_DATE_REGEX.test(locationAndDate)) {
     const loc = extractLocation(locationAndDate);
-    locationAndDate = formatStandardDate(loc);
+    // Nếu có địa danh hợp lệ nhưng ngày tháng sai định dạng
+    if (loc && loc !== "Hà Nội") {
+      locationAndDate = `${loc}, ngày ... tháng ... năm ...`;
+    } else {
+      locationAndDate = "[Địa danh], ngày ... tháng ... năm ...";
+    }
   }
 
-  // 7. Cơ quan ban hành
+  // 7. Cơ quan ban hành (Không tự bịa cơ quan cụ thể)
   const orgHeader1 = (source.orgHeader1 || "").toString().trim().toUpperCase();
-  const orgHeader2 = (source.orgHeader2 || (isParty ? "BAN THƯỜNG VỤ / VĂN PHÒNG" : "ỦY BAN NHÂN DÂN")).toString().trim().toUpperCase();
+  const orgHeader2 = (source.orgHeader2 || (isParty ? "[CƠ QUAN ĐẢNG BAN HÀNH]" : "[TÊN CƠ QUAN BAN HÀNH]")).toString().trim().toUpperCase();
 
   // 8. Trích yếu nội dung
-  const subject = (source.subject || `V/v thực hiện nhiệm vụ công tác theo quy định`).toString().trim();
+  const subject = (source.subject || `V/v ${documentType.toLowerCase()} theo quy định`).toString().trim();
 
   // 9. Nội dung chi tiết được làm sạch HTML
   const bodyHtml = sanitizeBodyHtml(source.bodyHtml);
 
-  // 10. Chức vụ & Người ký
-  const defaultSignTitle = isParty ? "TM. BAN THƯỜNG VỤ\nBÍ THƯ" : "TM. ỦY BAN NHÂN DÂN\nCHỦ TỊCH";
+  // 10. Chức vụ & Người ký (Không tự bịa 'Nguyễn Văn A')
+  const defaultSignTitle = isParty ? "T/M BAN THƯỜNG VỤ\n[CHỨC VỤ]" : "TM. ỦY BAN NHÂN DÂN\n[CHỨC VỤ]";
   const signTitle = (source.signTitle || defaultSignTitle).toString().trim();
-  const signName = (source.signName || "Nguyễn Văn A").toString().trim();
+  const signName = (source.signName && source.signName !== "Nguyễn Văn A") ? source.signName.toString().trim() : "[Họ và tên người ký]";
 
   // 11. Nơi nhận
   const defaultRecipients = isParty

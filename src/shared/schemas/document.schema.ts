@@ -132,3 +132,225 @@ export const DocumentFormatSchema = z.object({
 });
 
 export type DocumentFormatType = z.infer<typeof DocumentFormatSchema>;
+
+/**
+ * Loại cảnh báo / vi phạm thể thức
+ */
+export interface ND30ComplianceIssue {
+  id: string;
+  field: keyof DocumentFormatType | "general";
+  title: string;
+  message: string;
+  severity: "error" | "warning" | "info";
+  suggestion?: string;
+}
+
+/**
+ * Kết quả kiểm tra thể thức văn bản theo Nghị định 30/2020/NĐ-CP hoặc Hướng dẫn 05-HD/VPTW
+ */
+export interface ND30ComplianceReport {
+  passed: boolean;
+  score: number;
+  totalChecks: number;
+  passedChecks: number;
+  issues: ND30ComplianceIssue[];
+}
+
+/**
+ * Hàm kiểm tra sự tuân thủ thể thức Nghị định 30/2020/NĐ-CP và Hướng dẫn 05-HD/VPTW
+ */
+export function validateND30Compliance(
+  doc: Record<string, any>,
+  regime: "administrative" | "party" = "administrative"
+): ND30ComplianceReport {
+  const issues: ND30ComplianceIssue[] = [];
+  const isParty = regime === "party";
+  let passedChecks = 0;
+  const totalChecks = 9;
+
+  // 1. Quốc hiệu
+  const expectedH1 = isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
+  if (doc.nationalHeader1 !== expectedH1) {
+    issues.push({
+      id: "nationalHeader1",
+      field: "nationalHeader1",
+      title: "Quốc hiệu chưa đúng",
+      message: `Quốc hiệu bắt buộc phải là "${expectedH1}" (in hoa, đứng, đậm).`,
+      severity: "error",
+      suggestion: expectedH1,
+    });
+  } else {
+    passedChecks++;
+  }
+
+  // 2. Tiêu ngữ
+  if (!isParty) {
+    if (doc.nationalHeader2 !== "Độc lập - Tự do - Hạnh phúc") {
+      issues.push({
+        id: "nationalHeader2",
+        field: "nationalHeader2",
+        title: "Tiêu ngữ chưa đúng",
+        message: 'Tiêu ngữ bắt buộc là "Độc lập - Tự do - Hạnh phúc" (chữ thường, đứng, đậm, có vạch kẻ dưới).',
+        severity: "error",
+        suggestion: "Độc lập - Tự do - Hạnh phúc",
+      });
+    } else {
+      passedChecks++;
+    }
+  } else {
+    if (doc.nationalHeader2 && doc.nationalHeader2.trim()) {
+      issues.push({
+        id: "nationalHeader2",
+        field: "nationalHeader2",
+        title: "Văn bản Đảng không có Tiêu ngữ",
+        message: "Theo Hướng dẫn số 05-HD/VPTW, văn bản của Đảng không có tiêu ngữ 'Độc lập - Tự do - Hạnh phúc'.",
+        severity: "warning",
+        suggestion: "",
+      });
+    } else {
+      passedChecks++;
+    }
+  }
+
+  // 3. Cơ quan ban hành
+  if (!doc.orgHeader2 || !doc.orgHeader2.trim() || doc.orgHeader2.includes("[Tên cơ quan")) {
+    issues.push({
+      id: "orgHeader2",
+      field: "orgHeader2",
+      title: "Chưa xác định cơ quan ban hành",
+      message: "Tên cơ quan, tổ chức ban hành văn bản không được để trống hoặc là placeholder.",
+      severity: "error",
+      suggestion: "VD: ỦY BAN NHÂN DÂN THÀNH PHỐ / BỘ GIÁO DỤC VÀ ĐÀO TẠO",
+    });
+  } else if (doc.orgHeader2 !== doc.orgHeader2.toUpperCase()) {
+    issues.push({
+      id: "orgHeader2_case",
+      field: "orgHeader2",
+      title: "Cơ quan ban hành phải viết in hoa",
+      message: "Tên cơ quan ban hành văn bản phải được trình bày bằng chữ in hoa, cỡ 12-13, đứng, đậm.",
+      severity: "warning",
+      suggestion: doc.orgHeader2.toUpperCase(),
+    });
+  } else {
+    passedChecks++;
+  }
+
+  // 4. Số và ký hiệu văn bản
+  if (!doc.referenceNumber || !doc.referenceNumber.trim() || doc.referenceNumber.includes("...")) {
+    issues.push({
+      id: "referenceNumber_empty",
+      field: "referenceNumber",
+      title: "Chưa có số và ký hiệu văn bản",
+      message: "Văn bản chưa có số ký hiệu chính thức theo quy định Điều 10 NĐ 30/2020/NĐ-CP.",
+      severity: "warning",
+      suggestion: isParty ? "Số: 01-NQ/TW" : "Số: 01/QĐ-UBND",
+    });
+  } else if (!REFERENCE_NUMBER_REGEX.test(doc.referenceNumber.trim())) {
+    issues.push({
+      id: "referenceNumber_format",
+      field: "referenceNumber",
+      title: "Số ký hiệu chưa đúng quy cách",
+      message: "Số ký hiệu phải bắt đầu bằng 'Số: ' kèm chữ số và ký hiệu viết tắt loại văn bản, cơ quan.",
+      severity: "warning",
+      suggestion: doc.referenceNumber.startsWith("Số:") ? doc.referenceNumber : `Số: ${doc.referenceNumber}`,
+    });
+  } else {
+    passedChecks++;
+  }
+
+  // 5. Địa danh và ngày tháng
+  if (!doc.locationAndDate || !doc.locationAndDate.trim() || doc.locationAndDate.includes("...")) {
+    issues.push({
+      id: "locationAndDate_missing",
+      field: "locationAndDate",
+      title: "Chưa xác định ngày ban hành hoặc địa danh",
+      message: "Văn bản chưa có địa danh hoặc ngày tháng ban hành cụ thể.",
+      severity: "warning",
+      suggestion: "Hà Nội, ngày 14 tháng 10 năm 2026",
+    });
+  } else if (!LOCATION_AND_DATE_REGEX.test(doc.locationAndDate.trim())) {
+    issues.push({
+      id: "locationAndDate_format",
+      field: "locationAndDate",
+      title: "Định dạng ngày tháng chưa chuẩn NĐ 30",
+      message: "Phải có định dạng: '[Địa danh], ngày ... tháng ... năm ...' (in nghiêng).",
+      severity: "warning",
+    });
+  } else {
+    passedChecks++;
+  }
+
+  // 6. Loại văn bản và trích yếu
+  if (!doc.documentType || !doc.documentType.trim()) {
+    issues.push({
+      id: "documentType",
+      field: "documentType",
+      title: "Chưa có tên loại văn bản",
+      message: "Cần xác định loại văn bản (QUYẾT ĐỊNH, CÔNG VĂN, BÁO CÁO, KẾ HOẠCH...).",
+      severity: "error",
+    });
+  } else if (!doc.subject || !doc.subject.trim() || doc.subject.includes("[Trích yếu")) {
+    issues.push({
+      id: "subject",
+      field: "subject",
+      title: "Trích yếu nội dung còn để trống",
+      message: "Trích yếu nội dung phải tóm tắt ngắn gọn, chính xác mục đích ban hành của văn bản.",
+      severity: "warning",
+    });
+  } else {
+    passedChecks++;
+  }
+
+  // 7. Nội dung chi tiết
+  const bodyText = (doc.bodyHtml || "").replace(/<[^>]*>/g, " ").trim();
+  if (!bodyText || bodyText.length < 20) {
+    issues.push({
+      id: "bodyHtml",
+      field: "bodyHtml",
+      title: "Nội dung văn bản quá ngắn hoặc chưa có",
+      message: "Nội dung văn bản cần được soạn thảo chi tiết theo bố cục các Điều khoản hoặc phân mục rõ ràng.",
+      severity: "error",
+    });
+  } else {
+    passedChecks++;
+  }
+
+  // 8. Chức vụ & Người ký
+  if (!doc.signName || !doc.signName.trim() || doc.signName.includes("[Họ và tên") || doc.signName === "Nguyễn Văn A") {
+    issues.push({
+      id: "signName",
+      field: "signName",
+      title: "Chưa xác định họ tên người ký",
+      message: "Họ và tên người ký cần được ghi rõ ràng (chữ thường, đứng, đậm). Tránh để họ tên giả định.",
+      severity: "warning",
+      suggestion: "Ghi rõ họ và tên người có thẩm quyền ký",
+    });
+  } else {
+    passedChecks++;
+  }
+
+  // 9. Nơi nhận
+  if (!doc.recipients || !doc.recipients.trim()) {
+    issues.push({
+      id: "recipients",
+      field: "recipients",
+      title: "Chưa có nơi nhận văn bản",
+      message: "Cần chỉ định nơi nhận văn bản và bộ phận lưu trữ văn thư (Lưu: VT...).",
+      severity: "warning",
+      suggestion: "Như trên;\nLưu: VT.",
+    });
+  } else {
+    passedChecks++;
+  }
+
+  const score = Math.round((passedChecks / totalChecks) * 100);
+  const passed = issues.filter(i => i.severity === "error").length === 0;
+
+  return {
+    passed,
+    score,
+    totalChecks,
+    passedChecks,
+    issues,
+  };
+}

@@ -4,6 +4,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import mammoth from "mammoth";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { enforceND30Standards, formatStandardDate } from "./src/server/middleware/compliance.middleware.ts";
@@ -59,21 +61,19 @@ function fallbackRuleBasedParser(rawText: string, standardType: string) {
     htmlBody = `<p>${rawText}</p>`;
   }
 
-  const dateStr = formatStandardDate("Hà Nội");
-
   return {
-    orgHeader1: isParty ? "ĐẢNG BỘ TỈNH/THÀNH PHỐ" : "UBND TỈNH/THÀNH PHỐ",
-    orgHeader2: isParty ? "BAN THƯỜNG VỤ / VĂN PHÒNG" : "VĂN PHÒNG / SỞ BAN NGÀNH",
+    orgHeader1: isParty ? "" : "",
+    orgHeader2: isParty ? "[CƠ QUAN ĐẢNG BAN HÀNH]" : "[TÊN CƠ QUAN BAN HÀNH]",
     nationalHeader1: isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
     nationalHeader2: isParty ? "" : "Độc lập - Tự do - Hạnh phúc",
-    locationAndDate: dateStr,
+    locationAndDate: "[Địa danh], ngày ... tháng ... năm ...",
     documentType: docType,
-    referenceNumber: `Số: 01/${docType.slice(0, 2).toUpperCase()}`,
-    subject: `V/v ${docType.toLowerCase()} thực hiện nhiệm vụ công tác theo quy định`,
+    referenceNumber: `Số: .../${docType.slice(0, 2).toUpperCase()}`,
+    subject: `V/v ${docType.toLowerCase()} theo quy định`,
     bodyHtml: htmlBody,
-    signTitle: isParty ? "TM. BAN THƯỜNG VỤ\nBÍ THƯ" : "TM. ỦY BAN NHÂN DÂN\nCHỦ TỊCH",
-    signName: "Nguyễn Văn A",
-    recipients: isParty ? "Kính gửi: Các đảng bộ, chi bộ trực thuộc;\nLưu: VT." : "Kính gửi: Các cơ quan, đơn vị liên quan;\nNơi nhận: Như trên, Lưu: VT."
+    signTitle: isParty ? "T/M BAN THƯỜNG VỤ\n[CHỨC VỤ]" : "TM. ỦY BAN NHÂN DÂN\n[CHỨC VỤ]",
+    signName: "[Họ và tên người ký]",
+    recipients: isParty ? "Như trên;\nLưu: VT, Ban Tổ chức." : "Như trên;\nLưu: VT, TH."
   };
 }
 
@@ -81,8 +81,29 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+  app.use(cors());
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+  // Rate limiters for security and DoS protection
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Quá nhiều yêu cầu, vui lòng thử lại sau 15 phút." }
+  });
+
+  const aiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Bạn đã vượt quá giới hạn yêu cầu AI trong thời gian ngắn. Vui lòng thử lại sau ít phút." }
+  });
+
+  app.use("/api/", apiLimiter);
+  app.use("/api/ai/", aiLimiter);
 
   // API to parse uploaded file (.docx, .txt)
   app.post("/api/parse-docx", upload.single("file"), async (req, res) => {
@@ -92,19 +113,26 @@ async function startServer() {
       }
 
       const originalName = req.file.originalname.toLowerCase();
+      const ext = path.extname(originalName).toLowerCase();
+
+      if (ext !== ".docx" && ext !== ".txt") {
+        return res.status(400).json({ 
+          error: "Định dạng file không được hỗ trợ. Vui lòng tải lên file Microsoft Word (.docx) hoặc file văn bản thuần (.txt)." 
+        });
+      }
       
       // If plain text or txt file
-      if (originalName.endsWith(".txt") || req.file.mimetype === "text/plain") {
+      if (ext === ".txt" || req.file.mimetype === "text/plain") {
         const textContent = req.file.buffer.toString("utf-8");
         return res.json({
           success: true,
           text: textContent,
-          html: `<p>${textContent.replace(/\n/g, "</p><p>")}</p>`,
+          html: `<p>${textContent.replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>")}</p>`,
           fileType: "txt"
         });
       }
 
-      // Word .docx file
+      // Word .docx file parsed via Mammoth
       try {
         const result = await mammoth.extractRawText({ buffer: req.file.buffer });
         const htmlResult = await mammoth.convertToHtml({ buffer: req.file.buffer });
@@ -117,22 +145,13 @@ async function startServer() {
           fileType: "docx"
         });
       } catch (docErr: any) {
-        // Fallback if binary doc or corrupted zip
-        const rawString = req.file.buffer.toString("utf-8", 0, Math.min(req.file.buffer.length, 50000));
-        const cleanAscii = rawString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "").trim();
-        if (cleanAscii.length > 50) {
-          return res.json({
-            success: true,
-            text: cleanAscii,
-            html: `<p>${cleanAscii.replace(/\n/g, "</p><p>")}</p>`,
-            warning: "File không phải chuẩn .docx nhưng đã được trích xuất nội dung văn bản khả dụng."
-          });
-        }
-        throw new Error("Không thể đọc định dạng file này. Vui lòng đảm bảo file có đuôi .docx hoặc chuyển sang file văn bản .txt");
+        return res.status(422).json({
+          error: "Tệp tin không đúng định dạng Microsoft Word (.docx) hợp lệ hoặc cấu trúc file đã bị hỏng. Vui lòng kiểm tra lại tệp tin."
+        });
       }
     } catch (error: any) {
-      console.error("Parse docx error:", error);
-      res.status(500).json({ error: error.message || "Lỗi khi đọc file Word." });
+      console.error("Parse docx error occurred");
+      res.status(500).json({ error: "Lỗi xử lý khi đọc file tài liệu. Vui lòng thử lại." });
     }
   });
 
@@ -214,9 +233,8 @@ Hãy trả về kết quả dưới dạng JSON (chính xác định dạng JSON
 
       // DETERMINISTIC SAFETY NET: Cưỡng chế thể thức NĐ 30 & Zod Schema Validation
       const regime = standardType === "party" ? "party" : "administrative";
-      console.log("[COMPLIANCE] Raw AI output received:", parsed);
       const compliantDoc = enforceND30Standards(parsed, regime);
-      console.log("[COMPLIANCE] After enforcement & Zod validation:", compliantDoc);
+      console.log(`[COMPLIANCE] Processed document: type=${compliantDoc.documentType}, regime=${regime}`);
 
       return res.json({ success: true, formatted: compliantDoc });
     } catch (error: any) {

@@ -24,6 +24,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "cors": "^2.8.6",
     "docx": "^9.10.0",
+    "dompurify": "^3.4.17",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "express-rate-limit": "^8.7.1",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
+    "@types/dompurify": "^3.2.0",
     "@types/express": "^4.17.21",
     "@types/multer": "^2.3.0",
     "@types/node": "^22.14.0",

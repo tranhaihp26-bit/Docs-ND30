@@ -24,7 +24,8 @@ import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, List, ListOrdered, Undo, Redo, 
   Heading1, Heading2, Heading3, FileText, Building2, Scale, 
-  PenTool, PlusCircle, Bookmark, MapPin, Tag
+  PenTool, PlusCircle, Bookmark, MapPin, Tag, Table as TableIcon,
+  Trash2, Plus, Minus
 } from "lucide-react";
 
 export interface ND30EditorProps {
@@ -69,7 +70,7 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
     content,
     editorProps: {
       attributes: {
-        class: "prose max-w-none focus:outline-none min-h-[420px] p-6 font-serif text-[13pt] leading-[1.35] text-slate-900",
+        class: "prose max-w-none focus:outline-none min-h-[420px] p-6 font-serif text-[13pt] leading-[1.35] text-slate-900 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-slate-400 [&_th]:p-2 [&_th]:bg-slate-100 [&_td]:border [&_td]:border-slate-400 [&_td]:p-2",
         style: "font-family: 'Times New Roman', Times, serif;",
       },
     },
@@ -413,6 +414,66 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
           >
             <ListOrdered className="w-3.5 h-3.5" />
           </button>
+
+          <span className="h-4 w-px bg-slate-300 mx-1" />
+
+          {/* Table Operations */}
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            className={`p-1.5 rounded transition flex items-center gap-1 ${
+              editor.isActive("table") ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-200"
+            }`}
+            title="Chèn bảng biểu 3x3"
+          >
+            <TableIcon className="w-3.5 h-3.5" />
+            <span className="text-[10px] font-semibold hidden md:inline">Bảng</span>
+          </button>
+
+          {editor.isActive("table") && (
+            <div className="flex items-center gap-0.5 bg-blue-50 border border-blue-200 rounded px-1 py-0.5">
+              <button
+                type="button"
+                onClick={() => editor.chain().focus().addRowAfter().run()}
+                className="px-1.5 py-0.5 rounded text-[10px] text-blue-700 hover:bg-blue-100 font-semibold flex items-center gap-0.5"
+                title="Thêm hàng dưới"
+              >
+                <Plus className="w-2.5 h-2.5" /> Hàng
+              </button>
+              <button
+                type="button"
+                onClick={() => editor.chain().focus().addColumnAfter().run()}
+                className="px-1.5 py-0.5 rounded text-[10px] text-blue-700 hover:bg-blue-100 font-semibold flex items-center gap-0.5"
+                title="Thêm cột phải"
+              >
+                <Plus className="w-2.5 h-2.5" /> Cột
+              </button>
+              <button
+                type="button"
+                onClick={() => editor.chain().focus().deleteRow().run()}
+                className="px-1.5 py-0.5 rounded text-[10px] text-rose-700 hover:bg-rose-100 font-semibold flex items-center gap-0.5"
+                title="Xóa hàng hiện tại"
+              >
+                <Minus className="w-2.5 h-2.5" /> Hàng
+              </button>
+              <button
+                type="button"
+                onClick={() => editor.chain().focus().deleteColumn().run()}
+                className="px-1.5 py-0.5 rounded text-[10px] text-rose-700 hover:bg-rose-100 font-semibold flex items-center gap-0.5"
+                title="Xóa cột hiện tại"
+              >
+                <Minus className="w-2.5 h-2.5" /> Cột
+              </button>
+              <button
+                type="button"
+                onClick={() => editor.chain().focus().deleteTable().run()}
+                className="p-1 rounded text-rose-700 hover:bg-rose-100"
+                title="Xóa toàn bộ bảng"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Undo / Redo */}

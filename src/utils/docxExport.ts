@@ -69,6 +69,25 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
       if (tagName === "table") {
         const trElements = Array.from(child.querySelectorAll("tr"));
         if (trElements.length > 0) {
+          const isHiddenTable = styleAttr.includes("border: none") || child.classList.contains("border-none");
+          const tableBorders = isHiddenTable
+            ? {
+                top: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                left: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                right: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              }
+            : {
+                top: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                bottom: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                left: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                right: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+                insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+              };
+
           const docxRows = trElements.map(tr => {
             const cellElements = Array.from(tr.children).filter(
               c => c.tagName.toLowerCase() === "td" || c.tagName.toLowerCase() === "th"
@@ -78,6 +97,8 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
                 const isHeader = cell.tagName.toLowerCase() === "th";
                 const cellRuns = parseInlineNodes(cell);
                 return new TableCell({
+                  borders: isHiddenTable ? INVISIBLE_CELL_BORDER : undefined,
+                  margins: { top: 100, bottom: 100, left: 140, right: 140 },
                   children: [
                     new Paragraph({
                       alignment: isHeader ? AlignmentType.CENTER : AlignmentType.LEFT,
@@ -100,6 +121,7 @@ export function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
           elements.push(
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: tableBorders,
               rows: docxRows,
             })
           );
