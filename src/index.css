@@ -6,22 +6,29 @@
   }
 }
 
-/* Print styling for Decree 30 A4 document printing */
+/* Print styling for Decree 30 / HD 05 A4 document printing */
 @media print {
-  body {
+  html, body {
     background-color: white !important;
     color: black !important;
     margin: 0 !important;
     padding: 0 !important;
+    width: 210mm !important;
+    height: 100% !important;
   }
 
-  /* Hide everything except the document sheet */
+  /* Hide UI elements, navigation, sidebars and buttons */
   header,
   nav,
-  .no-print,
+  aside,
+  footer,
   button,
+  select,
+  input,
+  .no-print,
   .notification-bar,
-  .action-toolbar {
+  .action-toolbar,
+  .sticky {
     display: none !important;
   }
 
@@ -30,7 +37,7 @@
     padding: 0 !important;
     margin: 0 !important;
     max-width: none !important;
-    width: 100% !important;
+    width: 210mm !important;
   }
 
   .main-column {
@@ -39,20 +46,41 @@
 
   .preview-column {
     display: block !important;
-    width: 100% !important;
+    width: 210mm !important;
     max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   #printable-document {
     border: none !important;
     box-shadow: none !important;
-    margin: 0 auto !important;
-    padding: 20mm 15mm 20mm 30mm !important; /* Top 20mm, Right 15mm, Bottom 20mm, Left 30mm (NĐ 30 standard) */
+    margin: 0 !important;
+    padding: 20mm 15mm 20mm 30mm !important; /* Top 20mm, Right 15mm, Bottom 20mm, Left 30mm (NĐ 30) */
     width: 210mm !important;
     min-height: 297mm !important;
     max-width: none !important;
+    font-family: "Times New Roman", Times, serif !important;
     font-size: 13pt !important;
     line-height: 1.4 !important;
+    transform: none !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Page breaks & Table pagination handling */
+  .page-break {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  table, tr, blockquote {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  h1, h2, h3, h4 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
 
   @page {

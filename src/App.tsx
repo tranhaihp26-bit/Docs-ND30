@@ -10,6 +10,7 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import DOMPurify from "dompurify";
 import ND30Editor from "./components/ND30Editor.tsx";
+import { A4DocumentPreview } from "./components/A4DocumentPreview.tsx";
 import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
 import { 
   type DocumentFormatType, 
@@ -1438,97 +1439,16 @@ export default function App() {
             Right Column: Live A4 Visual Preview Page (P0-03, P0-06)
            ======================================================== */}
         <div className="lg:col-span-1">
-          <div className="sticky top-20 bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-blue-600" />
-                <span>Trang A4 chuẩn NĐ 30</span>
-              </h3>
-              <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium">Times New Roman 13pt</span>
-              </div>
-            </div>
-
-            {/* A4 Paper Visual Container */}
-            <div
-              id="printable-document"
-              ref={previewRef}
-              className="bg-white text-slate-900 p-6 sm:p-7 rounded border border-slate-300 shadow-md mx-auto font-serif text-[11.5px] leading-relaxed selection:bg-blue-100 relative overflow-hidden"
-              style={{ width: "100%", minHeight: "600px", maxWidth: "430px" }}
-            >
-              {/* Header 2 columns */}
-              <div className="grid grid-cols-2 text-center mb-4 gap-2 items-start">
-                <div>
-                  {doc.orgHeader1 && (
-                    <p className="uppercase text-[10px] leading-tight text-slate-800">{doc.orgHeader1}</p>
-                  )}
-                  <p className="font-bold uppercase text-[10.5px] leading-tight mt-0.5 text-slate-900">{doc.orgHeader2}</p>
-                  <div className="w-16 h-0.5 bg-slate-900 mx-auto my-1"></div>
-                  <p className="text-[10px] mt-1 text-slate-800">{doc.referenceNumber}</p>
-                </div>
-                <div>
-                  <p className="font-bold uppercase text-[10.5px] leading-tight text-slate-900">{doc.nationalHeader1}</p>
-                  {standardType !== "party" && doc.nationalHeader2 ? (
-                    <>
-                      <p className="font-bold text-[10.5px] leading-tight mt-0.5 text-slate-900">{doc.nationalHeader2}</p>
-                      <div className="w-20 h-0.5 bg-slate-900 mx-auto my-1"></div>
-                    </>
-                  ) : (
-                    <div className="w-20 h-0.5 bg-slate-900 mx-auto my-1"></div>
-                  )}
-                  <p className="text-[9.5px] italic mt-1 text-slate-800">{doc.locationAndDate}</p>
-                </div>
-              </div>
-
-              {/* Tên loại văn bản */}
-              <div className="text-center my-3.5">
-                <h2 className="font-bold uppercase text-xs tracking-wide text-slate-900">{doc.documentType}</h2>
-              </div>
-
-              {/* Trích yếu */}
-              <div className="text-center my-2 px-3">
-                <p className="italic text-[11px] font-semibold leading-snug text-slate-900">{doc.subject}</p>
-              </div>
-
-              {/* Nội dung chi tiết - Đã được làm sạch bằng DOMPurify để chống XSS (P0-07) */}
-              <div 
-                className="space-y-2 text-justify text-[11px] my-3 leading-relaxed [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-slate-400 [&_th]:p-1 [&_td]:border [&_td]:border-slate-400 [&_td]:p-1"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(doc.bodyHtml) }}
-              />
-
-              {/* Khối chữ ký & Nơi nhận (Bảng 2 cột) */}
-              <div className="mt-8 grid grid-cols-2 gap-2 pt-2 items-start">
-                {/* Cột trái: Nơi nhận */}
-                <div className="text-[9.5px] leading-normal text-slate-800">
-                  <p className="font-bold italic">Nơi nhận:</p>
-                  <div className="whitespace-pre-line text-slate-700 mt-0.5">
-                    {doc.recipients}
-                  </div>
-                </div>
-
-                {/* Cột phải: Chức vụ, chữ ký, họ tên */}
-                <div className="text-center">
-                  <p className="font-bold uppercase text-[10.5px] whitespace-pre-line leading-tight text-slate-900">
-                    {doc.signTitle}
-                  </p>
-                  <p className="text-[9px] italic my-1 text-slate-500">(Ký, đóng dấu)</p>
-                  <div className="h-8"></div>
-                  <p className="font-bold text-[11px] text-slate-900">{doc.signName}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick action under preview */}
-            <div className="pt-2 flex gap-2">
-              <button
-                onClick={exportToDocx}
-                disabled={isExportingDocx}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
-              >
-                <Download className="w-3.5 h-3.5" /> Xuất Word (.docx)
-              </button>
-            </div>
-          </div>
+          <A4DocumentPreview
+            doc={doc}
+            standardType={standardType}
+            previewRef={previewRef}
+            onExportDocx={exportToDocx}
+            onExportPdf={exportToPdf}
+            onPrint={handlePrint}
+            isExportingDocx={isExportingDocx}
+            isExportingPdf={isExportingPdf}
+          />
         </div>
 
       </main>
