@@ -34,7 +34,7 @@ function escapeHtml(str: string): string {
  */
 function extractParagraphText(pXml: string): string {
   const parts: string[] = [];
-  const runRegex = /<w:t(?:[\s>][\s\S]*?)>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>/g;
+  const runRegex = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>/g;
   let match: RegExpExecArray | null;
   while ((match = runRegex.exec(pXml)) !== null) {
     if (match[0] === "<w:tab/>") {
@@ -70,7 +70,7 @@ function paragraphXmlToHtml(pXml: string): string {
     const isUnderline = /<w:u(?:\s|>|\/>)/.test(rXml) && !/<w:u\s+w:val="(?:none|0|false)"/.test(rXml);
 
     const tParts: string[] = [];
-    const tRegex = /<w:t(?:[\s>][\s\S]*?)>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>/g;
+    const tRegex = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>/g;
     let tMatch: RegExpExecArray | null;
     while ((tMatch = tRegex.exec(rXml)) !== null) {
       if (tMatch[0] === "<w:tab/>") {
@@ -162,74 +162,72 @@ function extractTableDetails(tblXml: string): {
  * Scans top-level children of <w:body> inside word/document.xml.
  */
 function extractBodyXmlChildren(xml: string): Array<{ tag: "w:p" | "w:tbl" | "w:sectPr"; xml: string }> {
-  const bodyStart = xml.indexOf("<w:body");
-  if (bodyStart === -1) return [];
-  const bodyOpenEnd = xml.indexOf(">", bodyStart) + 1;
-  const bodyEnd = xml.lastIndexOf("</w:body>");
-  if (bodyEnd === -1) return [];
-  const content = xml.slice(bodyOpenEnd, bodyEnd);
-
+  const bodyMatch = /<w:body(?=[\s>])/.exec(xml);
+  if (!bodyMatch) return [];
   const results: Array<{ tag: "w:p" | "w:tbl" | "w:sectPr"; xml: string }> = [];
-  let i = 0;
+  const supported = new Set(["w:p", "w:tbl", "w:sectPr"]);
+  const stack: string[] = [];
+  let childStart = -1;
+  let childTag = "";
+  let pos = xml.indexOf(">", bodyMatch.index) + 1;
 
-  while (i < content.length) {
-    const pIdx = content.indexOf("<w:p", i);
-    const tblIdx = content.indexOf("<w:tbl", i);
-    const sectIdx = content.indexOf("<w:sectPr", i);
-
-    const candidates = [
-      { tag: "w:p" as const, idx: pIdx },
-      { tag: "w:tbl" as const, idx: tblIdx },
-      { tag: "w:sectPr" as const, idx: sectIdx },
-    ]
-      .filter((c) => c.idx !== -1)
-      .sort((a, b) => a.idx - b.idx);
-
-    if (candidates.length === 0) break;
-    const next = candidates[0];
-
-    const openTag = "<" + next.tag;
-    const closeTag = "</" + next.tag + ">";
-
-    // Fast check for self closing e.g. <w:p/> or <w:sectPr/>
-    const nextCloseBracket = content.indexOf(">", next.idx);
-    if (nextCloseBracket !== -1 && content[nextCloseBracket - 1] === "/") {
-      results.push({ tag: next.tag, xml: content.slice(next.idx, nextCloseBracket + 1) });
-      i = nextCloseBracket + 1;
+  while (pos < xml.length) {
+    const start = xml.indexOf("<", pos);
+    if (start < 0) break;
+    if (xml.startsWith("<!--", start)) {
+      const end = xml.indexOf("-->", start + 4);
+      if (end < 0) break;
+      pos = end + 3;
+      continue;
+    }
+    if (xml.startsWith("<?", start)) {
+      const end = xml.indexOf("?>", start + 2);
+      if (end < 0) break;
+      pos = end + 2;
       continue;
     }
 
-    let depth = 0;
-    let pos = next.idx;
-    let endPos = -1;
-
-    while (pos < content.length) {
-      const nextOpen = content.indexOf(openTag, pos);
-      const nextClose = content.indexOf(closeTag, pos);
-
-      if (nextClose === -1) break;
-
-      if (nextOpen !== -1 && nextOpen < nextClose) {
-        depth++;
-        pos = nextOpen + openTag.length;
-      } else {
-        depth--;
-        pos = nextClose + closeTag.length;
-        if (depth === 0) {
-          endPos = pos;
-          break;
-        }
+    let end = start + 1;
+    let quote: string | null = null;
+    for (; end < xml.length; end++) {
+      const char = xml[end];
+      if (quote) {
+        if (char === quote) quote = null;
+      } else if (char === '"' || char === "'") {
+        quote = char;
+      } else if (char === ">") {
+        break;
       }
     }
+    if (end >= xml.length) break;
+    const rawTag = xml.slice(start + 1, end);
+    const match = /^\s*(\/?)\s*([\w:.-]+)/.exec(rawTag);
+    pos = end + 1;
+    if (!match) continue;
+    const [, closing, name] = match;
+    const selfClosing = !closing && /\/\s*$/.test(rawTag);
 
-    if (endPos !== -1) {
-      results.push({ tag: next.tag, xml: content.slice(next.idx, endPos) });
-      i = endPos;
-    } else {
-      i = next.idx + openTag.length;
+    if (closing) {
+      if (stack.length === 0) {
+        if (name === "w:body") break;
+        continue;
+      }
+      if (stack.pop() !== name) throw new Error(`Invalid OOXML nesting near ${name}`);
+      if (stack.length === 0 && supported.has(childTag)) {
+        results.push({ tag: childTag as "w:p" | "w:tbl" | "w:sectPr", xml: xml.slice(childStart, pos) });
+      }
+    } else if (stack.length === 0) {
+      if (selfClosing) {
+        if (supported.has(name)) {
+          results.push({ tag: name as "w:p" | "w:tbl" | "w:sectPr", xml: xml.slice(start, pos) });
+        }
+      } else {
+        childStart = start;
+        childTag = name;
+      }
     }
+    if (!closing && !selfClosing) stack.push(name);
   }
-
   return results;
 }
 
