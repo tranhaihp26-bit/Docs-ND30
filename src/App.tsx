@@ -4,7 +4,7 @@ import {
   CheckCircle2, AlertCircle, LayoutTemplate, Edit3, Eye, 
   Save, Wand2, ArrowRight, FileCheck, ShieldCheck, Check,
   X, AlertTriangle, Info, HelpCircle, FilePlus, ChevronRight,
-  ExternalLink, Copy, Bookmark, Building2, MapPin, Tag
+  ExternalLink, Copy, Bookmark, Building2, MapPin, Tag, FlaskConical
 } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -30,6 +30,7 @@ import { formatStandardDate, extractLocation } from "./server/middleware/complia
 import { detectDocumentType } from "./server/parser.ts";
 import { COMPANY_HEADER_PROFILE_ID, COMPANY_HEADER_PARENT_LINES, applyCompanyProfile, matchesCompanyHeader, LOCKED_COMPANY_FIELDS } from "./canonical/nd30/companyHeader.ts";
 import { MINUTES_TEMPLATE, type TemplatePreset } from "./utils/minutesTemplate.ts";
+import { loadPilotTestFile, loadPilotTestManifest, type PilotTestDocument } from "./utils/pilotTestDocuments.ts";
 import { ADMINISTRATIVE_DOCUMENT_TYPES, getAdministrativeDocumentStructure, hasAdministrativeHeaderIssueDate, separateEmbeddedSignatureTables, type DocumentSignatureBlock } from "./utils/documentStructure.ts";
 
 export interface DocumentState {
@@ -428,6 +429,12 @@ export default function App() {
   const [importReviewAccepted, setImportReviewAccepted] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState<TemplatePreset | null>(null);
   const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
+  const [pilotLibraryOpen, setPilotLibraryOpen] = useState(false);
+  const [pilotItems, setPilotItems] = useState<PilotTestDocument[]>([]);
+  const [selectedPilotType, setSelectedPilotType] = useState("");
+  const [selectedPilotId, setSelectedPilotId] = useState("");
+  const [isLoadingPilotCatalog, setIsLoadingPilotCatalog] = useState(false);
+  const [isLoadingPilotFile, setIsLoadingPilotFile] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [aiAudit, setAiAudit] = useState<AiImportAudit | null>(null);
@@ -678,11 +685,7 @@ export default function App() {
   // Option B: parse the selected file locally so import works in previews without an API route.
   const uploadRequestIdRef = useRef<number>(0);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const fileInput = e.currentTarget;
-
+  const loadFileIntoEditor = async (file: File, fileInput?: HTMLInputElement) => {
     const requestId = ++uploadRequestIdRef.current;
 
     setIsUploading(true);
@@ -736,8 +739,46 @@ export default function App() {
     } finally {
       if (requestId === uploadRequestIdRef.current) {
         setIsUploading(false);
-        fileInput.value = "";
+        if (fileInput) fileInput.value = "";
       }
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) void loadFileIntoEditor(file, e.currentTarget);
+  };
+
+  const openPilotLibrary = async () => {
+    setPilotLibraryOpen(true);
+    if (pilotItems.length) return;
+    setIsLoadingPilotCatalog(true);
+    setErrorMsg("");
+    try {
+      const items = await loadPilotTestManifest();
+      setPilotItems(items);
+      setSelectedPilotType(items[0].documentType);
+      setSelectedPilotId(items[0].id);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Không tải được danh mục tài liệu pilot.");
+    } finally {
+      setIsLoadingPilotCatalog(false);
+    }
+  };
+
+  const loadSelectedPilotDocument = async () => {
+    const item = pilotItems.find(candidate => candidate.id === selectedPilotId);
+    if (!item) return;
+    setIsLoadingPilotFile(true);
+    setErrorMsg("");
+    try {
+      const file = await loadPilotTestFile(item);
+      setPilotLibraryOpen(false);
+      await loadFileIntoEditor(file);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Không tải được tài liệu pilot.");
+    } finally {
+      setIsLoadingPilotFile(false);
     }
   };
 
@@ -1119,6 +1160,9 @@ export default function App() {
     ? buildImportReview(sourceSnapshot || structuredImport, standardType === "party" ? "party" : "administrative")
       .filter(check => check.status === "NEEDS_REVIEW")
     : [];
+  const pilotDocumentTypes = [...new Set(pilotItems.map(item => item.documentType))];
+  const pilotItemsForType = pilotItems.filter(item => item.documentType === selectedPilotType);
+  const selectedPilot = pilotItemsForType.find(item => item.id === selectedPilotId) || pilotItemsForType[0];
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
@@ -1246,7 +1290,7 @@ export default function App() {
               </div>
               <input id="upload-file-input" type="file" accept=".docx,.txt" onChange={handleFileUpload} disabled={isUploading} className="sr-only" aria-label="Tải tài liệu DOCX hoặc TXT" />
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" aria-label="Bắt đầu tài liệu">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" aria-label="Bắt đầu tài liệu">
                 <button type="button" onClick={() => document.getElementById("upload-file-input")?.click()} className="text-left rounded-xl border border-blue-300 bg-blue-50 p-4 hover:bg-blue-100">
                   <Upload className="w-5 h-5 text-blue-700 mb-2" /><strong className="block text-sm">Tải DOCX/TXT</strong><span className="text-xs text-slate-600">Đọc tệp và mở ngay trong trình soạn thảo</span>
                 </button>
@@ -1256,7 +1300,41 @@ export default function App() {
                 <button type="button" onClick={() => document.getElementById("paste-source-input")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="text-left rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50">
                   <Edit3 className="w-5 h-5 text-blue-700 mb-2" /><strong className="block text-sm">Dán văn bản</strong><span className="text-xs text-slate-600">Nhập trực tiếp vào phần soạn thảo</span>
                 </button>
+                <button type="button" onClick={() => pilotLibraryOpen ? setPilotLibraryOpen(false) : void openPilotLibrary()} disabled={isLoadingPilotCatalog} className="text-left rounded-xl border border-violet-200 bg-violet-50 p-4 hover:bg-violet-100 disabled:opacity-60">
+                  <FlaskConical className="w-5 h-5 text-violet-700 mb-2" /><strong className="block text-sm">Tài liệu pilot</strong><span className="text-xs text-slate-600">{isLoadingPilotCatalog ? "Đang tải danh mục…" : pilotLibraryOpen ? "Đóng bộ tài liệu giả lập" : "Nạp DOCX kiểm thử theo loại văn bản"}</span>
+                </button>
               </div>
+
+              {pilotLibraryOpen && <section className="bg-white border border-violet-200 rounded-2xl p-5 shadow-2xs space-y-4" aria-label="Bộ tài liệu pilot">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2"><FlaskConical className="w-4 h-4 text-violet-700" />Bộ tài liệu pilot Nghị định 30</h2>
+                    <p className="text-xs text-slate-600 mt-1">87 DOCX giả lập · 3 tình huống cho mỗi loại · nạp qua cùng luồng parse như tệp tải lên</p>
+                  </div>
+                  <span className="text-[11px] text-violet-800 bg-violet-50 border border-violet-100 rounded px-2 py-1">Không chứa hồ sơ thật</span>
+                </div>
+                {isLoadingPilotCatalog ? <p className="text-sm text-slate-500">Đang đọc danh mục…</p> : pilotItems.length > 0 && <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                  <label className="text-xs font-semibold text-slate-700">Loại văn bản
+                    <select value={selectedPilotType} onChange={event => {
+                      const nextType = event.target.value;
+                      setSelectedPilotType(nextType);
+                      const firstForType = pilotItems.find(item => item.documentType === nextType);
+                      if (firstForType) setSelectedPilotId(firstForType.id);
+                    }} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+                      {pilotDocumentTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-700">Tình huống
+                    <select value={selectedPilot?.id || ""} onChange={event => setSelectedPilotId(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+                      {pilotItemsForType.map(item => <option key={item.id} value={item.id}>{item.scenario}</option>)}
+                    </select>
+                  </label>
+                  <button type="button" onClick={() => void loadSelectedPilotDocument()} disabled={!selectedPilot || isLoadingPilotFile || isUploading} className="rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50">
+                    {isLoadingPilotFile || isUploading ? "Đang nạp và parse…" : "Nạp vào trình soạn thảo"}
+                  </button>
+                </div>}
+                {selectedPilot && <p className="text-[11px] text-slate-500">Tệp được chọn: <span className="font-medium text-slate-700">{selectedPilot.filename}</span>. Các trường, phần nội dung, chữ ký, nơi nhận và phụ lục sẽ được đưa vào vùng soạn thảo/đối chiếu tương ứng.</p>}
+              </section>}
 
               {/* Thư viện mẫu chỉ mở khi người dùng chọn. */}
               {templateLibraryOpen && <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs">

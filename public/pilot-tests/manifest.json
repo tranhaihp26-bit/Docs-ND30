@@ -1,0 +1,611 @@
+[
+  {
+    "id": "nghi-quyet-01-co-ban",
+    "documentType": "Nghị quyết",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-nghi-quyet-01-co-ban.docx",
+    "url": "/pilot-tests/nghi-quyet/pilot-nghi-quyet-01-co-ban.docx"
+  },
+  {
+    "id": "nghi-quyet-02-bang-noi-dung",
+    "documentType": "Nghị quyết",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-nghi-quyet-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/nghi-quyet/pilot-nghi-quyet-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "nghi-quyet-03-danh-sach",
+    "documentType": "Nghị quyết",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-nghi-quyet-03-danh-sach.docx",
+    "url": "/pilot-tests/nghi-quyet/pilot-nghi-quyet-03-danh-sach.docx"
+  },
+  {
+    "id": "quyet-dinh-01-co-ban",
+    "documentType": "Quyết định",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-quyet-dinh-01-co-ban.docx",
+    "url": "/pilot-tests/quyet-dinh/pilot-quyet-dinh-01-co-ban.docx"
+  },
+  {
+    "id": "quyet-dinh-02-bang-noi-dung",
+    "documentType": "Quyết định",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-quyet-dinh-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/quyet-dinh/pilot-quyet-dinh-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "quyet-dinh-03-danh-sach",
+    "documentType": "Quyết định",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-quyet-dinh-03-danh-sach.docx",
+    "url": "/pilot-tests/quyet-dinh/pilot-quyet-dinh-03-danh-sach.docx"
+  },
+  {
+    "id": "chi-thi-01-co-ban",
+    "documentType": "Chỉ thị",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-chi-thi-01-co-ban.docx",
+    "url": "/pilot-tests/chi-thi/pilot-chi-thi-01-co-ban.docx"
+  },
+  {
+    "id": "chi-thi-02-bang-noi-dung",
+    "documentType": "Chỉ thị",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-chi-thi-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/chi-thi/pilot-chi-thi-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "chi-thi-03-danh-sach",
+    "documentType": "Chỉ thị",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-chi-thi-03-danh-sach.docx",
+    "url": "/pilot-tests/chi-thi/pilot-chi-thi-03-danh-sach.docx"
+  },
+  {
+    "id": "quy-che-01-co-ban",
+    "documentType": "Quy chế",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-quy-che-01-co-ban.docx",
+    "url": "/pilot-tests/quy-che/pilot-quy-che-01-co-ban.docx"
+  },
+  {
+    "id": "quy-che-02-bang-noi-dung",
+    "documentType": "Quy chế",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-quy-che-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/quy-che/pilot-quy-che-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "quy-che-03-danh-sach",
+    "documentType": "Quy chế",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-quy-che-03-danh-sach.docx",
+    "url": "/pilot-tests/quy-che/pilot-quy-che-03-danh-sach.docx"
+  },
+  {
+    "id": "quy-dinh-01-co-ban",
+    "documentType": "Quy định",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-quy-dinh-01-co-ban.docx",
+    "url": "/pilot-tests/quy-dinh/pilot-quy-dinh-01-co-ban.docx"
+  },
+  {
+    "id": "quy-dinh-02-bang-noi-dung",
+    "documentType": "Quy định",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-quy-dinh-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/quy-dinh/pilot-quy-dinh-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "quy-dinh-03-danh-sach",
+    "documentType": "Quy định",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-quy-dinh-03-danh-sach.docx",
+    "url": "/pilot-tests/quy-dinh/pilot-quy-dinh-03-danh-sach.docx"
+  },
+  {
+    "id": "thong-cao-01-co-ban",
+    "documentType": "Thông cáo",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-thong-cao-01-co-ban.docx",
+    "url": "/pilot-tests/thong-cao/pilot-thong-cao-01-co-ban.docx"
+  },
+  {
+    "id": "thong-cao-02-bang-noi-dung",
+    "documentType": "Thông cáo",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-thong-cao-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/thong-cao/pilot-thong-cao-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "thong-cao-03-danh-sach",
+    "documentType": "Thông cáo",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-thong-cao-03-danh-sach.docx",
+    "url": "/pilot-tests/thong-cao/pilot-thong-cao-03-danh-sach.docx"
+  },
+  {
+    "id": "thong-bao-01-co-ban",
+    "documentType": "Thông báo",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-thong-bao-01-co-ban.docx",
+    "url": "/pilot-tests/thong-bao/pilot-thong-bao-01-co-ban.docx"
+  },
+  {
+    "id": "thong-bao-02-bang-noi-dung",
+    "documentType": "Thông báo",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-thong-bao-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/thong-bao/pilot-thong-bao-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "thong-bao-03-danh-sach",
+    "documentType": "Thông báo",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-thong-bao-03-danh-sach.docx",
+    "url": "/pilot-tests/thong-bao/pilot-thong-bao-03-danh-sach.docx"
+  },
+  {
+    "id": "huong-dan-01-co-ban",
+    "documentType": "Hướng dẫn",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-huong-dan-01-co-ban.docx",
+    "url": "/pilot-tests/huong-dan/pilot-huong-dan-01-co-ban.docx"
+  },
+  {
+    "id": "huong-dan-02-bang-noi-dung",
+    "documentType": "Hướng dẫn",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-huong-dan-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/huong-dan/pilot-huong-dan-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "huong-dan-03-danh-sach",
+    "documentType": "Hướng dẫn",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-huong-dan-03-danh-sach.docx",
+    "url": "/pilot-tests/huong-dan/pilot-huong-dan-03-danh-sach.docx"
+  },
+  {
+    "id": "chuong-trinh-01-co-ban",
+    "documentType": "Chương trình",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-chuong-trinh-01-co-ban.docx",
+    "url": "/pilot-tests/chuong-trinh/pilot-chuong-trinh-01-co-ban.docx"
+  },
+  {
+    "id": "chuong-trinh-02-bang-noi-dung",
+    "documentType": "Chương trình",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-chuong-trinh-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/chuong-trinh/pilot-chuong-trinh-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "chuong-trinh-03-danh-sach",
+    "documentType": "Chương trình",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-chuong-trinh-03-danh-sach.docx",
+    "url": "/pilot-tests/chuong-trinh/pilot-chuong-trinh-03-danh-sach.docx"
+  },
+  {
+    "id": "ke-hoach-01-co-ban",
+    "documentType": "Kế hoạch",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-ke-hoach-01-co-ban.docx",
+    "url": "/pilot-tests/ke-hoach/pilot-ke-hoach-01-co-ban.docx"
+  },
+  {
+    "id": "ke-hoach-02-bang-noi-dung",
+    "documentType": "Kế hoạch",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-ke-hoach-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/ke-hoach/pilot-ke-hoach-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "ke-hoach-03-danh-sach",
+    "documentType": "Kế hoạch",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-ke-hoach-03-danh-sach.docx",
+    "url": "/pilot-tests/ke-hoach/pilot-ke-hoach-03-danh-sach.docx"
+  },
+  {
+    "id": "phuong-an-01-co-ban",
+    "documentType": "Phương án",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-phuong-an-01-co-ban.docx",
+    "url": "/pilot-tests/phuong-an/pilot-phuong-an-01-co-ban.docx"
+  },
+  {
+    "id": "phuong-an-02-bang-noi-dung",
+    "documentType": "Phương án",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-phuong-an-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/phuong-an/pilot-phuong-an-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "phuong-an-03-danh-sach",
+    "documentType": "Phương án",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-phuong-an-03-danh-sach.docx",
+    "url": "/pilot-tests/phuong-an/pilot-phuong-an-03-danh-sach.docx"
+  },
+  {
+    "id": "de-an-01-co-ban",
+    "documentType": "Đề án",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-de-an-01-co-ban.docx",
+    "url": "/pilot-tests/de-an/pilot-de-an-01-co-ban.docx"
+  },
+  {
+    "id": "de-an-02-bang-noi-dung",
+    "documentType": "Đề án",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-de-an-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/de-an/pilot-de-an-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "de-an-03-danh-sach",
+    "documentType": "Đề án",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-de-an-03-danh-sach.docx",
+    "url": "/pilot-tests/de-an/pilot-de-an-03-danh-sach.docx"
+  },
+  {
+    "id": "du-an-01-co-ban",
+    "documentType": "Dự án",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-du-an-01-co-ban.docx",
+    "url": "/pilot-tests/du-an/pilot-du-an-01-co-ban.docx"
+  },
+  {
+    "id": "du-an-02-bang-noi-dung",
+    "documentType": "Dự án",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-du-an-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/du-an/pilot-du-an-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "du-an-03-danh-sach",
+    "documentType": "Dự án",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-du-an-03-danh-sach.docx",
+    "url": "/pilot-tests/du-an/pilot-du-an-03-danh-sach.docx"
+  },
+  {
+    "id": "bao-cao-01-co-ban",
+    "documentType": "Báo cáo",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-bao-cao-01-co-ban.docx",
+    "url": "/pilot-tests/bao-cao/pilot-bao-cao-01-co-ban.docx"
+  },
+  {
+    "id": "bao-cao-02-bang-noi-dung",
+    "documentType": "Báo cáo",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-bao-cao-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/bao-cao/pilot-bao-cao-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "bao-cao-03-danh-sach",
+    "documentType": "Báo cáo",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-bao-cao-03-danh-sach.docx",
+    "url": "/pilot-tests/bao-cao/pilot-bao-cao-03-danh-sach.docx"
+  },
+  {
+    "id": "bien-ban-01-co-ban",
+    "documentType": "Biên bản",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-bien-ban-01-co-ban.docx",
+    "url": "/pilot-tests/bien-ban/pilot-bien-ban-01-co-ban.docx"
+  },
+  {
+    "id": "bien-ban-02-bang-noi-dung",
+    "documentType": "Biên bản",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-bien-ban-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/bien-ban/pilot-bien-ban-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "bien-ban-03-danh-sach",
+    "documentType": "Biên bản",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-bien-ban-03-danh-sach.docx",
+    "url": "/pilot-tests/bien-ban/pilot-bien-ban-03-danh-sach.docx"
+  },
+  {
+    "id": "to-trinh-01-co-ban",
+    "documentType": "Tờ trình",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-to-trinh-01-co-ban.docx",
+    "url": "/pilot-tests/to-trinh/pilot-to-trinh-01-co-ban.docx"
+  },
+  {
+    "id": "to-trinh-02-bang-noi-dung",
+    "documentType": "Tờ trình",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-to-trinh-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/to-trinh/pilot-to-trinh-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "to-trinh-03-danh-sach",
+    "documentType": "Tờ trình",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-to-trinh-03-danh-sach.docx",
+    "url": "/pilot-tests/to-trinh/pilot-to-trinh-03-danh-sach.docx"
+  },
+  {
+    "id": "hop-dong-01-co-ban",
+    "documentType": "Hợp đồng",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-hop-dong-01-co-ban.docx",
+    "url": "/pilot-tests/hop-dong/pilot-hop-dong-01-co-ban.docx"
+  },
+  {
+    "id": "hop-dong-02-bang-noi-dung",
+    "documentType": "Hợp đồng",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-hop-dong-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/hop-dong/pilot-hop-dong-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "hop-dong-03-danh-sach",
+    "documentType": "Hợp đồng",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-hop-dong-03-danh-sach.docx",
+    "url": "/pilot-tests/hop-dong/pilot-hop-dong-03-danh-sach.docx"
+  },
+  {
+    "id": "cong-van-01-co-ban",
+    "documentType": "Công văn",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-cong-van-01-co-ban.docx",
+    "url": "/pilot-tests/cong-van/pilot-cong-van-01-co-ban.docx"
+  },
+  {
+    "id": "cong-van-02-bang-noi-dung",
+    "documentType": "Công văn",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-cong-van-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/cong-van/pilot-cong-van-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "cong-van-03-danh-sach",
+    "documentType": "Công văn",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-cong-van-03-danh-sach.docx",
+    "url": "/pilot-tests/cong-van/pilot-cong-van-03-danh-sach.docx"
+  },
+  {
+    "id": "cong-dien-01-co-ban",
+    "documentType": "Công điện",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-cong-dien-01-co-ban.docx",
+    "url": "/pilot-tests/cong-dien/pilot-cong-dien-01-co-ban.docx"
+  },
+  {
+    "id": "cong-dien-02-bang-noi-dung",
+    "documentType": "Công điện",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-cong-dien-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/cong-dien/pilot-cong-dien-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "cong-dien-03-danh-sach",
+    "documentType": "Công điện",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-cong-dien-03-danh-sach.docx",
+    "url": "/pilot-tests/cong-dien/pilot-cong-dien-03-danh-sach.docx"
+  },
+  {
+    "id": "ban-ghi-nho-01-co-ban",
+    "documentType": "Bản ghi nhớ",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-ban-ghi-nho-01-co-ban.docx",
+    "url": "/pilot-tests/ban-ghi-nho/pilot-ban-ghi-nho-01-co-ban.docx"
+  },
+  {
+    "id": "ban-ghi-nho-02-bang-noi-dung",
+    "documentType": "Bản ghi nhớ",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-ban-ghi-nho-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/ban-ghi-nho/pilot-ban-ghi-nho-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "ban-ghi-nho-03-danh-sach",
+    "documentType": "Bản ghi nhớ",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-ban-ghi-nho-03-danh-sach.docx",
+    "url": "/pilot-tests/ban-ghi-nho/pilot-ban-ghi-nho-03-danh-sach.docx"
+  },
+  {
+    "id": "ban-thoa-thuan-01-co-ban",
+    "documentType": "Bản thỏa thuận",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-ban-thoa-thuan-01-co-ban.docx",
+    "url": "/pilot-tests/ban-thoa-thuan/pilot-ban-thoa-thuan-01-co-ban.docx"
+  },
+  {
+    "id": "ban-thoa-thuan-02-bang-noi-dung",
+    "documentType": "Bản thỏa thuận",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-ban-thoa-thuan-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/ban-thoa-thuan/pilot-ban-thoa-thuan-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "ban-thoa-thuan-03-danh-sach",
+    "documentType": "Bản thỏa thuận",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-ban-thoa-thuan-03-danh-sach.docx",
+    "url": "/pilot-tests/ban-thoa-thuan/pilot-ban-thoa-thuan-03-danh-sach.docx"
+  },
+  {
+    "id": "giay-uy-quyen-01-co-ban",
+    "documentType": "Giấy ủy quyền",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-giay-uy-quyen-01-co-ban.docx",
+    "url": "/pilot-tests/giay-uy-quyen/pilot-giay-uy-quyen-01-co-ban.docx"
+  },
+  {
+    "id": "giay-uy-quyen-02-bang-noi-dung",
+    "documentType": "Giấy ủy quyền",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-giay-uy-quyen-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/giay-uy-quyen/pilot-giay-uy-quyen-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "giay-uy-quyen-03-danh-sach",
+    "documentType": "Giấy ủy quyền",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-giay-uy-quyen-03-danh-sach.docx",
+    "url": "/pilot-tests/giay-uy-quyen/pilot-giay-uy-quyen-03-danh-sach.docx"
+  },
+  {
+    "id": "giay-moi-01-co-ban",
+    "documentType": "Giấy mời",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-giay-moi-01-co-ban.docx",
+    "url": "/pilot-tests/giay-moi/pilot-giay-moi-01-co-ban.docx"
+  },
+  {
+    "id": "giay-moi-02-bang-noi-dung",
+    "documentType": "Giấy mời",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-giay-moi-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/giay-moi/pilot-giay-moi-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "giay-moi-03-danh-sach",
+    "documentType": "Giấy mời",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-giay-moi-03-danh-sach.docx",
+    "url": "/pilot-tests/giay-moi/pilot-giay-moi-03-danh-sach.docx"
+  },
+  {
+    "id": "giay-gioi-thieu-01-co-ban",
+    "documentType": "Giấy giới thiệu",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-giay-gioi-thieu-01-co-ban.docx",
+    "url": "/pilot-tests/giay-gioi-thieu/pilot-giay-gioi-thieu-01-co-ban.docx"
+  },
+  {
+    "id": "giay-gioi-thieu-02-bang-noi-dung",
+    "documentType": "Giấy giới thiệu",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-giay-gioi-thieu-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/giay-gioi-thieu/pilot-giay-gioi-thieu-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "giay-gioi-thieu-03-danh-sach",
+    "documentType": "Giấy giới thiệu",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-giay-gioi-thieu-03-danh-sach.docx",
+    "url": "/pilot-tests/giay-gioi-thieu/pilot-giay-gioi-thieu-03-danh-sach.docx"
+  },
+  {
+    "id": "giay-nghi-phep-01-co-ban",
+    "documentType": "Giấy nghỉ phép",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-giay-nghi-phep-01-co-ban.docx",
+    "url": "/pilot-tests/giay-nghi-phep/pilot-giay-nghi-phep-01-co-ban.docx"
+  },
+  {
+    "id": "giay-nghi-phep-02-bang-noi-dung",
+    "documentType": "Giấy nghỉ phép",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-giay-nghi-phep-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/giay-nghi-phep/pilot-giay-nghi-phep-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "giay-nghi-phep-03-danh-sach",
+    "documentType": "Giấy nghỉ phép",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-giay-nghi-phep-03-danh-sach.docx",
+    "url": "/pilot-tests/giay-nghi-phep/pilot-giay-nghi-phep-03-danh-sach.docx"
+  },
+  {
+    "id": "phieu-gui-01-co-ban",
+    "documentType": "Phiếu gửi",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-phieu-gui-01-co-ban.docx",
+    "url": "/pilot-tests/phieu-gui/pilot-phieu-gui-01-co-ban.docx"
+  },
+  {
+    "id": "phieu-gui-02-bang-noi-dung",
+    "documentType": "Phiếu gửi",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-phieu-gui-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/phieu-gui/pilot-phieu-gui-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "phieu-gui-03-danh-sach",
+    "documentType": "Phiếu gửi",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-phieu-gui-03-danh-sach.docx",
+    "url": "/pilot-tests/phieu-gui/pilot-phieu-gui-03-danh-sach.docx"
+  },
+  {
+    "id": "phieu-chuyen-01-co-ban",
+    "documentType": "Phiếu chuyển",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-phieu-chuyen-01-co-ban.docx",
+    "url": "/pilot-tests/phieu-chuyen/pilot-phieu-chuyen-01-co-ban.docx"
+  },
+  {
+    "id": "phieu-chuyen-02-bang-noi-dung",
+    "documentType": "Phiếu chuyển",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-phieu-chuyen-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/phieu-chuyen/pilot-phieu-chuyen-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "phieu-chuyen-03-danh-sach",
+    "documentType": "Phiếu chuyển",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-phieu-chuyen-03-danh-sach.docx",
+    "url": "/pilot-tests/phieu-chuyen/pilot-phieu-chuyen-03-danh-sach.docx"
+  },
+  {
+    "id": "phieu-bao-01-co-ban",
+    "documentType": "Phiếu báo",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-phieu-bao-01-co-ban.docx",
+    "url": "/pilot-tests/phieu-bao/pilot-phieu-bao-01-co-ban.docx"
+  },
+  {
+    "id": "phieu-bao-02-bang-noi-dung",
+    "documentType": "Phiếu báo",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-phieu-bao-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/phieu-bao/pilot-phieu-bao-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "phieu-bao-03-danh-sach",
+    "documentType": "Phiếu báo",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-phieu-bao-03-danh-sach.docx",
+    "url": "/pilot-tests/phieu-bao/pilot-phieu-bao-03-danh-sach.docx"
+  },
+  {
+    "id": "thu-cong-01-co-ban",
+    "documentType": "Thư công",
+    "scenario": "Cơ bản — đoạn văn và thành phần chuẩn",
+    "filename": "pilot-thu-cong-01-co-ban.docx",
+    "url": "/pilot-tests/thu-cong/pilot-thu-cong-01-co-ban.docx"
+  },
+  {
+    "id": "thu-cong-02-bang-noi-dung",
+    "documentType": "Thư công",
+    "scenario": "Bảng — nội dung kết hợp bảng",
+    "filename": "pilot-thu-cong-02-bang-noi-dung.docx",
+    "url": "/pilot-tests/thu-cong/pilot-thu-cong-02-bang-noi-dung.docx"
+  },
+  {
+    "id": "thu-cong-03-danh-sach",
+    "documentType": "Thư công",
+    "scenario": "Danh sách — nhiều ý và phụ lục",
+    "filename": "pilot-thu-cong-03-danh-sach.docx",
+    "url": "/pilot-tests/thu-cong/pilot-thu-cong-03-danh-sach.docx"
+  }
+]

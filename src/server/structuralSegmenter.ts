@@ -12,14 +12,14 @@ import type {
   SourceRegion,
 } from "../shared/schemas/document.schema.ts";
 import { detectDocumentType } from "./parser.ts";
-import { getSignatureBlocksFromTable } from "../utils/documentStructure.ts";
+import { ADMINISTRATIVE_DOCUMENT_TYPES, getSignatureBlocksFromTable } from "../utils/documentStructure.ts";
 
 /**
  * Standard regex patterns for Vietnamese administrative & party documents
  */
 const NATIONAL_HEADER_1_REGEX = /CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM|ĐẢNG CỘNG SẢN VIỆT NAM/i;
 const NATIONAL_HEADER_2_REGEX = /Độc lập\s*-\s*Tự do\s*-\s*Hạnh phúc/i;
-const DATE_LOCATION_REGEX = /(?:^|\b)([\p{L}\s\.\-]+),\s*ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})(?:\b|$)/u;
+const DATE_LOCATION_REGEX = /^([\p{L}\s\.\-]+),\s*ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})\s*$/u;
 const REF_NUMBER_REGEX = /Số:\s*([^\n\r,;]+)|Số\s*([0-9]+[^\n\r,;]*)/i;
 
 function extractHeaderDate(text: string): Pick<ExtractedField<string>, "value" | "confidence" | "status"> | null {
@@ -297,7 +297,7 @@ export function segmentSourceBlocks(
   const docTypeKeywords = [
     "QUYẾT ĐỊNH", "KẾ HOẠCH", "TỜ TRÌNH", "THÔNG BÁO", "NGHỊ QUYẾT",
     "BÁO CÁO", "NGHỊ ĐỊNH", "CHỈ THỊ", "HƯỚNG DẪN", "CÔNG VĂN", "BIÊN BẢN"
-  ];
+  ].concat(ADMINISTRATIVE_DOCUMENT_TYPES.map(type => type.name.toLocaleUpperCase("vi-VN")));
 
   let docTypeIndex = -1;
   const docTypeSearchStart = options.fileType === "txt" ? 0 : nextStartIndex;
@@ -482,19 +482,18 @@ export function segmentSourceBlocks(
       const flatText = data.flat().join(" ");
       const hasRecipients = /Nơi nhận\s*:/i.test(flatText);
       const hasSign = isSignFormula(flatText) || flatText.toUpperCase().includes("GIÁM ĐỐC");
+      const tableSigners = getSignatureBlocksFromTable(data);
 
-      // Check if it's meeting minutes 3-sign table (SEP-06)
-      const isMinutesSignTable = b.tableShape.columns === 3 && (
-        flatText.toUpperCase().includes("THƯ KÝ") ||
-        flatText.toUpperCase().includes("CHỦ TỌA") ||
-        flatText.toUpperCase().includes("ĐẠI DIỆN")
-      );
+      // A minutes signature may use two columns (secretary/chairperson) or more.
+      // Require multiple recognized signer roles so an ordinary body table is not captured.
+      const isMinutesSignTable = b.tableShape.columns >= 2 &&
+        /THƯ KÝ|CHỦ TỌA|NGƯỜI GHI BIÊN BẢN|ĐẠI DIỆN|CHỦ TRÌ/i.test(flatText) && tableSigners.length >= 2;
 
       if ((hasRecipients && hasSign) || isMinutesSignTable || (b.tableShape.rows <= 3 && hasSign)) {
         sigFoundIndex = i;
         b.role = "signature";
         if (isMinutesSignTable) signatureHtml = b.html || undefined;
-        signatureBlocks = getSignatureBlocksFromTable(data).map(block => ({
+        signatureBlocks = tableSigners.map(block => ({
           ...block,
           sourceBlockIds: [b.id],
         }));
