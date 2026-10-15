@@ -106,6 +106,18 @@ assert.deepEqual(new Set(generatedRegions), new Set(["header", "metadata", "body
 assert.equal(report.sections.find(section => section.region === "header")?.status, "no_finding");
 assert.equal(report.sections.find(section => section.region === "appendix")?.status, "no_finding");
 
+let retryCalls = 0;
+const retried = await runImportAiAudit(input, async () => {
+  retryCalls++;
+  return {
+    text: retryCalls === 1 ? "not valid JSON" : JSON.stringify({ summary: "Đã rà soát lại.", findings: [], visualLimitations: [] }),
+    model: "test-model",
+  };
+});
+assert.equal(retried.scope, "complete", "an invalid model response is retried once and valid output is included");
+assert.equal(retried.reviewedChunks, retried.totalChunks);
+assert.equal(retryCalls, retried.totalChunks + 1, "only the malformed chunk receives an extra model call");
+
 let failedRegion: AuditRegion | "" = "";
 const partial = await runImportAiAudit(input, async prompt => {
   const region = prompt.match(/Vùng: .*\((\w+)\)/)?.[1] as AuditRegion;

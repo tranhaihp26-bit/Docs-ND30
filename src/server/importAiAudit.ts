@@ -374,10 +374,20 @@ export async function runImportAiAudit(input: AuditInput, generate: (prompt: str
       `Với biên bản có bảng ký nhiều người, không yêu cầu chữ ký đơn hoặc Nơi nhận nếu nguồn không có. Trả JSON thuần: {"summary":"...","findings":[{"category":"content|format|layout|structure","severity":"attention|suggestion","fieldKey":"...","blockId":"...","observation":"...","recommendation":"..."}],"visualLimitations":["..."]}.\n` +
       `DỮ LIỆU ĐÃ PARSE (JSON):\n${chunk.text}`;
     try {
-      const response = await generate(prompt);
-      const result = chunk.region === "source"
-        ? parseOriginalComparisonResponse(response.text, chunk, input.originalSource!.text, new Set(rules.map(rule => rule.id)))
-        : parseAuditResponse(response.text, chunk.region, chunk.blockIds, chunk.fieldKeys);
+      const parseResponse = (text: string) => chunk.region === "source"
+        ? parseOriginalComparisonResponse(text, chunk, input.originalSource!.text, new Set(rules.map(rule => rule.id)))
+        : parseAuditResponse(text, chunk.region, chunk.blockIds, chunk.fieldKeys);
+      let response = await generate(prompt);
+      let result: ReturnType<typeof parseAuditResponse>;
+      try {
+        result = parseResponse(response.text);
+      } catch {
+        const repairPrompt = chunk.region === "source"
+          ? "\n\nPHẢN HỒI TRƯỚC KHÔNG ĐẠT KIỂM TRA JSON HOẶC BẰNG CHỨNG. Hãy đánh giá lại cùng dữ liệu và trả duy nhất JSON hợp lệ theo đúng schema trong yêu cầu. Chỉ đưa finding nếu có sourceQuote trích nguyên văn liên tục trong file và ruleIds đều thuộc bộ quy tắc đã gửi; mỗi finding phải có đúng một fieldKey hoặc blockId hợp lệ. Nếu không thể chứng minh chắc chắn, trả findings rỗng."
+          : "\n\nPHẢN HỒI TRƯỚC KHÔNG ĐẠT KIỂM TRA JSON HOẶC VỊ TRÍ. Hãy đánh giá lại cùng dữ liệu và trả duy nhất JSON hợp lệ theo đúng schema trong yêu cầu. Mỗi finding phải dùng đúng một fieldKey hoặc blockId có trong items của lượt này. Nếu không có finding cụ thể, trả findings rỗng.";
+        response = await generate(`${prompt}${repairPrompt}`);
+        result = parseResponse(response.text);
+      }
       model = response.model;
       reviewedChunks++;
       state.succeeded++;
