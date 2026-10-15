@@ -159,8 +159,9 @@ async function startServer() {
         });
       }
       
-      // If plain text or txt file
-      if (ext === ".txt" || req.file.mimetype === "text/plain") {
+      // If plain text or txt file - ONLY check extension, not MIME type
+      // A .docx file with MIME text/plain must still be processed as DOCX
+      if (ext === ".txt") {
         const textContent = req.file.buffer.toString("utf-8");
         const extracted = extractBlocksFromTxt(textContent);
         const structured = segmentSourceBlocks(extracted.blocks, {
@@ -204,6 +205,16 @@ async function startServer() {
       console.error("Parse docx error occurred");
       res.status(500).json({ error: "Lỗi xử lý khi đọc file tài liệu. Vui lòng thử lại." });
     }
+  });
+
+  app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: "Tệp tin quá lớn. Kích thước tối đa cho phép là 25 MB." });
+      }
+      return res.status(400).json({ error: `Lỗi tải lên: ${err.message}` });
+    }
+    next(err);
   });
 
   // API to format and structure document using Gemini AI according to Nghị định 30 or Hướng dẫn 05

@@ -12,6 +12,7 @@ import DOMPurify from "dompurify";
 import ND30Editor from "./components/ND30Editor.tsx";
 import { A4DocumentPreview } from "./components/A4DocumentPreview.tsx";
 import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
+import { parseImportResponse } from "./utils/importState.ts";
 import { 
   type DocumentFormatType, 
   validateND30Compliance, 
@@ -347,6 +348,7 @@ export default function App() {
   const [rawText, setRawText] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [uploadedHtml, setUploadedHtml] = useState("");
+  const [uploadedFileType, setUploadedFileType] = useState<"docx" | "txt" | null>(null);
   const [customInstructions, setCustomInstructions] = useState("");
   
   // Loading flags
@@ -446,14 +448,27 @@ export default function App() {
   };
 
   // Option B: File Upload handler (.docx, .txt)
+  // Transactional upload: validate response before any state change, use AbortController for race conditions
+  const uploadControllerRef = useRef<AbortController | null>(null);
+  const uploadRequestIdRef = useRef<number>(0);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const fileInput = e.currentTarget;
+
+    // Abort any in-flight request to prevent race conditions (A slow response overwriting B)
+    if (uploadControllerRef.current) {
+      uploadControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    uploadControllerRef.current = controller;
+    const requestId = ++uploadRequestIdRef.current;
 
     setIsUploading(true);
     setErrorMsg("");
     setSuccessMsg("");
-    setUploadedFileName(file.name);
+    // Do NOT set uploadedFileName yet - wait for valid response
 
     const formData = new FormData();
     formData.append("file", file);
@@ -462,24 +477,55 @@ export default function App() {
       const res = await fetch("/api/parse-docx", {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
-      const data = await res.json();
-      if (data.success && data.text) {
-        setRawText(data.text);
-        const sanitizedHtml = data.html ? DOMPurify.sanitize(data.html) : safeTextToHtml(data.text);
-        setUploadedHtml(sanitizedHtml);
-        if (data.structured) {
-          setStructuredImport(data.structured);
-        }
-        const appCount = data.structured?.appendices?.length || 0;
-        setSuccessMsg(`Đã đọc thành công tệp "${file.name}" (${data.text.length} ký tự, ${data.blocks?.length || 0} khối, ${appCount} phụ lục). Bạn có thể kiểm tra phân vùng hoặc đưa trực tiếp vào Editor.`);
-      } else {
-        setErrorMsg(data.error || "Không thể đọc tệp tin đã tải lên.");
+
+      // Ignore response if a newer request has started
+      if (requestId !== uploadRequestIdRef.current) {
+        return;
       }
+
+      // CRITICAL: Re-check requestId immediately AFTER await res.json()
+      // A response can become stale during the await
+      const data = await res.json();
+
+      // SECOND CHECK: Another request may have started while awaiting res.json()
+      if (requestId !== uploadRequestIdRef.current) {
+        return;
+      }
+
+      // Validate response before ANY state change - throws on invalid/empty/error
+      const parsed = parseImportResponse(file.name, data);
+
+      // ATOMIC STATE UPDATE: all import state changes happen together only after validation
+      setRawText(parsed.text);
+      setUploadedHtml(DOMPurify.sanitize(parsed.html));
+      setStructuredImport(parsed.structured);
+      setUploadedFileName(parsed.filename); // Set filename only after successful parse
+      setUploadedFileType(parsed.fileType); // Set fileType from validated response
+
+      const appCount = parsed.structured?.appendices?.length || 0;
+      const blockCount = data.blocks?.length || 0;
+      setSuccessMsg(`Đã đọc thành công tệp "${parsed.filename}" (${parsed.text.length} ký tự, ${blockCount} khối, ${appCount} phụ lục). Bạn có thể kiểm tra phân vùng hoặc đưa trực tiếp vào Editor.`);
     } catch (err: any) {
-      setErrorMsg("Lỗi khi kết nối với máy chủ: " + err.message);
+      // Ignore aborted requests
+      if (err.name === "AbortError" || err.name === "CancellationError") {
+        return;
+      }
+      // Ignore stale responses
+      if (requestId !== uploadRequestIdRef.current) {
+        return;
+      }
+
+      // Nothing from this failed upload has entered document state.
+      const errorMessage = err.message || "Không thể đọc tệp tin đã tải lên.";
+      setErrorMsg(errorMessage);
     } finally {
-      setIsUploading(false);
+      if (requestId === uploadRequestIdRef.current) {
+        setIsUploading(false);
+        uploadControllerRef.current = null;
+        fileInput.value = "";
+      }
     }
   };
 
@@ -525,7 +571,7 @@ export default function App() {
         appendices: structuredImport.appendices || [],
         unclassified: structuredImport.unclassified || [],
         importMetadata: {
-          sourceType: "docx",
+          sourceType: uploadedFileType || "docx",
           status: "confirmed",
           sourceFilename: uploadedFileName,
         }
