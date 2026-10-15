@@ -6,7 +6,7 @@
 - **DUY NHẤT** nguồn quy tắc: `quanggiaphthh/chuan-hoa-van-ban-nghi-dinh-30`, commit `078dae21f9e23975676179fa189f5c01b605f49a`.
 - Release catalog: `v22-runtime/release/admin-nd30-verified-rc-v20.yaml` — **435 verified canonical rules** (nhiều domain, không chỉ thể thức văn bản). Không dùng `nghi-dinh-30/*.md` legacy để quyết định kết quả máy.
 - Phương pháp: REUSE FIRST. Dùng toàn bộ 435 rule ID và constraint từ repo nguồn, **không bịa một bộ 435 rule mới**. Không kiểm tra nguồn pháp lý bên ngoài.
-- Tệp tham chiếu duy nhất cho **organization profile**: `reference/Company_HoaTieu_Fixed_Header_A4.docx` đã được người dùng duyệt.
+- Chuẩn thị giác hiện hành cho **organization profile**: tệp Word `Tieu ngu chuan.docx` do người dùng cung cấp. Bản `reference/Company_HoaTieu_Fixed_Header_A4.docx` trong gói là bản tham chiếu cũ; không dùng kích thước 75/90 mm của bản đó để ghi đè bố cục hiện hành.
 
 ## Cách đưa vào Google AI Studio
 
@@ -32,13 +32,13 @@ npm test
 ND30_RULE_SOURCE_DIR=/absolute/path/chuan-hoa-van-ban-nghi-dinh-30 npm run rules:sync
 ```
 
-5. Thử chọn 1 mẫu hành chính mới → xác nhận 2 cột đầu **75/90 mm**, chiều rộng **165 mm**; văn bản thân 155 mm với lề trong thêm 5 mm; chữ được ngắt chủ động; dưới tên Công ty và tiêu ngữ có đường kẻ OOXML thực; không có viền bảng; 2 trường số/ký hiệu & ngày tháng cho phép nhập.
+5. Thử chọn 1 mẫu hành chính mới → xác nhận bảng đầu theo tệp Word gốc: cột **5187/5245 twips**, thụt đầu bảng **-874 twips**; tên Công ty và quốc hiệu mỗi bên một dòng; văn bản thân 155 mm với lề trong thêm 5 mm; dưới tên Công ty và tiêu ngữ có đường kẻ OOXML thực; không có viền bảng; 2 trường số/ký hiệu & ngày tháng cho phép nhập.
 6. Thử tải lên một DOCX hoàn chỉnh → bảo đảm **không** áp profile đầu trang công ty lên nội dung nhập, không trùng khối đầu. Thử 1/3/10 trang bằng Word hoặc LibreOffice.
 7. Ghi log, Word render, so sánh và báo cáo rõ trạng thái.
 
 ## Những thay đổi có mã nguồn thực thi
 
-- `src/canonical/nd30/companyHeader.ts`: fixed-layout company header 165mm, 75mm + 90mm, không viền, chia dòng có chủ đích, paragraph border dùng OOXML.
+- `src/canonical/nd30/companyHeader.ts`: bảng đầu trang theo số đo của tệp Word gốc, tên Công ty một dòng, không viền, paragraph border dùng OOXML.
 - `src/canonical/nd30/canonicalAudit.ts`: đánh giá theo catalog canonical 435 rule. Chưa có dữ liệu/capability => `NOT_EVALUATED`, **không tính PASS**. Đối chiếu thuộc tính section thực tế từ `word/document.xml` nếu có đầu ra DOCX.
 - `scripts/sync_verified_nd30.mjs`: lấy toàn bộ verified catalog từ repo nguồn đúng commit; giữ source/provenance và file hợp đồng rule.
 - `scripts/apply_overlay.py`: patch an toàn các file gốc, dừng nếu anchor thay đổi. Giữ bản sao tệp gốc trong `.nd30-overlay-backup/` ở máy chạy.
@@ -51,7 +51,7 @@ ND30_RULE_SOURCE_DIR=/absolute/path/chuan-hoa-van-ban-nghi-dinh-30 npm run rules
 - Những rule có `PROHIBITED` hoặc `SUGGEST_ONLY` không được tự sửa. Quy tắc canonical về tính áp dụng và thời hiệu phải giữ nguyên.
 - `auditCanonicalND30` hiện thực đầy đủ kết quả coverage nhưng chỉ kết luận PASS/FAIL tự động với các rule **section OOXML có bằng chứng xác thực**. Những họ rule khác muốn thực thi cần tái sử dụng pipeline .NET canonical của repo nguồn, KHÔNG tự suy đoán để đổi sang PASS.
 - Các bài kiểm tra cần chạy **trong workspace AI Studio sau khi tải đầy đủ source thực**. Không báo lint/build PASS trước khi có log thực thi từ workspace đó.
-- Phần đầu 165mm nằm hoàn toàn trong vùng lề ND30 (210 − 30 − 15 =165mm). Thân văn bản 155mm là **profile tổ chức**, được thụt vào thêm 5mm hai bên, không làm thay đổi lề trang bắt buộc.
+- Bảng đầu theo tệp Word gốc rộng khoảng 184 mm và bắt đầu trước lề trái văn bản khoảng 15,4 mm; vẫn nằm trong khổ giấy A4. Thân văn bản 155 mm là **profile tổ chức**, được thụt vào thêm 5 mm hai bên.
 - Không áp phần đầu Công ty cho văn bản Đảng hoặc tài liệu được tải lên như văn bản hoàn chỉnh.
 
 ## Trạng thái

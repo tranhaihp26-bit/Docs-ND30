@@ -38,7 +38,22 @@ assert.ok(sx.includes('CÔNG TY HOA TIÊU'));
 assert.ok(sx.includes('HÀNG HẢI MIỀN BẮC'));
 assert.ok(sx.includes(COMPANY_HEADER_ISSUER.split(' ').slice(-2).join(' ')));
 assert.ok(sx.includes('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM'));
-assert.ok(sx.includes('<w:br') || sx.includes('<w:br/'),'Fixed line breaks for long issuer names are essential');
+const firstCellStart = sx.indexOf('<w:tc>');
+const firstCellEnd = sx.indexOf('</w:tc>', firstCellStart);
+assert.ok(firstCellStart >= 0 && firstCellEnd > firstCellStart, 'Company header needs a left table cell');
+const leftCellXml = sx.slice(firstCellStart, firstCellEnd);
+assert.equal((leftCellXml.match(/<w:br\b/g) || []).length, 1,
+  'The Word reference breaks the parent name once but keeps the company name on one line');
+assert.ok(leftCellXml.includes(`>${COMPANY_HEADER_ISSUER}</w:t>`),
+  'The full company name must be one uninterrupted Word run, as in Tieu ngu chuan.docx');
+assert.ok(/<w:tblInd\b[^>]*w:w="-874"/.test(sx),
+  'The original Word reference places the table 874 twips left of the text margin');
+assert.ok(/<w:gridCol\b[^>]*w:w="5187"/.test(sx) && /<w:gridCol\b[^>]*w:w="5245"/.test(sx),
+  'The original Word reference uses 5187/5245 twip columns so both bold headings fit on one line');
+const headerTableXml = sx.slice(sx.indexOf('<w:tbl>'), sx.indexOf('</w:tbl>') + '</w:tbl>'.length);
+const dateCellXml = headerTableXml.slice(headerTableXml.lastIndexOf('<w:tc>'));
+assert.ok(/<w:jc\b[^>]*w:val="right"/.test(dateCellXml),
+  'The location and date must align with the right edge of the national heading in the Word reference');
 assert.ok(sx.includes('<w:tblW') && sx.includes(String(Math.round(COMPANY_HEADER_GEOMETRY_MM.headerWidth*1440/25.4)).slice(0,3)), 'Company header should be a fixed-width table');
 assert.ok(sx.includes('<w:bottom') || sx.includes('<w:pBdr'), 'Real paragraph underlines required, not hyphen text');
 const assessed=await auditGeneratedDocx(new Blob([new Uint8Array(buffer)]));
@@ -50,4 +65,4 @@ assert.equal(imported.headerProfile,'generic','Imported documents must not inher
 assert.equal(doc.headerProfile,COMPANY_HEADER_PROFILE_ID);
 
 console.log(`[CANONICAL] 435 verified rules loaded; PASS=${assessed.counts.PASS}, NOT_EVALUATED=${assessed.counts.NOT_EVALUATED}.`);
-console.log('[COMPANY HEADER] Fixed 165mm table, controlled breaks, true paragraph borders, imported-doc protection: OK');
+console.log('[COMPANY HEADER] Word-reference table, one-line issuer, true paragraph borders, imported-doc protection: OK');

@@ -8,12 +8,12 @@
   "stage": "OVERLAY_PREPARED_NOT_EXECUTED_IN_AISTUDIO",
   "files": {
     "AI_STUDIO_EXECUTOR_PROMPT.txt": {
-      "sha256": "fadd53539f2dd48cc1f2320d8df6a5815efd553eed016c19fd77fca3a7bb82f1",
-      "bytes": 1160
+      "sha256": "9430d744621f5dc0fd3550bdae1472b4905b9d7968a51ebabd564714d1d286e7",
+      "bytes": 1215
     },
     "README_UPLOAD_TO_AISTUDIO.md": {
-      "sha256": "121c0074af5c89766538b8d0af40b70d08b29a3b5817436a614b00bfa3152c42",
-      "bytes": 5497
+      "sha256": "927fc2ab2300c895becd59555f9033d29f97c6077eba0f6ced8c33f8426794b2",
+      "bytes": 5820
     },
     "reference/Company_HoaTieu_Fixed_Header_A4.docx": {
       "sha256": "ad33f2fdc105a5c52763eb3da5924bb45f73fcc2446514dbf6d410954423738d",
@@ -32,16 +32,16 @@
       "bytes": 5404
     },
     "src/canonical/nd30/companyHeader.ts": {
-      "sha256": "8e5091c903722441ddf743c3f60014a3c5993caa2ad52488f848bf8b12e9d284",
-      "bytes": 5076
+      "sha256": "6bcf2e4e0b765be0014294b2ce17d286ac73eb48530ba085987c62edbd51208d",
+      "bytes": 6004
     },
     "src/canonical/nd30/rules.generated.json": {
       "sha256": "f111e31433b94f8213ba122b8f6a5950ef2efaba686e8cbcfea6b5cb5ab0b474",
       "bytes": 95
     },
     "tests/nd30-canonical-overlay.test.ts": {
-      "sha256": "5f393d73342da1c5e5c39fea1bcbf5d324d2c375cce5c24a9510e3b99088125f",
-      "bytes": 3374
+      "sha256": "85f885f1b52d6b4690de4c2e807d6e20fc1ed3f35d94ee6d9c5be4b80a4b3af5",
+      "bytes": 4580
     }
   }
 }

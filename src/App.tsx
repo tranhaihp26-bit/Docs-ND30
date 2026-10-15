@@ -1326,7 +1326,7 @@ export default function App() {
                     <option value={COMPANY_HEADER_PROFILE_ID}>Công ty Hoa tiêu Hàng hải miền Bắc — phần đầu cố định</option>
                   </select>
                   <p className="text-[11px] text-slate-600 mt-1.5">
-                    Profile công ty dùng tên cơ quan cố định và bố cục 75/90 mm; số ký hiệu, ngày ban hành và nội dung vẫn chỉnh sửa được.
+                    Profile công ty dùng tên cơ quan cố định và bố cục theo tệp Tiêu ngữ chuẩn; số ký hiệu, ngày ban hành và nội dung vẫn chỉnh sửa được.
                   </p>
                 </div>
               )}

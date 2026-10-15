@@ -29,6 +29,16 @@ export interface A4DocumentPreviewProps {
   isExportingPdf?: boolean;
 }
 
+// docx-preview does not currently apply the negative OOXML table indent. Restore
+// that placement in its HTML view so it matches the exported Word document.
+function positionCompanyTableInDocxPreview(root: HTMLElement) {
+  const table = Array.from(root.querySelectorAll("table"))
+    .find((candidate) => candidate.textContent?.includes(COMPANY_HEADER_ISSUER_LINES[0]));
+  if (!table) return;
+  table.style.marginLeft = `${COMPANY_HEADER_GEOMETRY_MM.headerIndent}mm`;
+  table.style.tableLayout = "fixed";
+}
+
 export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
   doc,
   standardType,
@@ -124,6 +134,9 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           trimXmlDeclaration: true,
           debug: false,
         });
+        if (isCompanyHeader && docxContainerRef.current) {
+          positionCompanyTableInDocxPreview(docxContainerRef.current);
+        }
 
         setDocxRenderError(false);
       } catch (err) {
@@ -138,7 +151,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
       isMounted = false;
       clearTimeout(timeoutId);
     };
-  }, [doc, standardType, isParty, renderEngine]);
+  }, [doc, standardType, isParty, isCompanyHeader, renderEngine]);
 
   // 3. Render Modal DOCX Real Engine when Modal is Open
   useEffect(() => {
@@ -164,6 +177,9 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           trimXmlDeclaration: true,
           debug: false,
         });
+        if (isCompanyHeader && modalDocxContainerRef.current) {
+          positionCompanyTableInDocxPreview(modalDocxContainerRef.current);
+        }
       } catch (err) {
         console.warn("Modal docx-preview render error:", err);
       }
@@ -171,7 +187,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
 
     renderModalDocx();
     return () => { isMounted = false; };
-  }, [isModalOpen, doc, standardType, isParty, renderEngine]);
+  }, [isModalOpen, doc, standardType, isParty, isCompanyHeader, renderEngine]);
 
   // 4. Estimate page count for CSS Canvas fallback
   useEffect(() => {
@@ -226,6 +242,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           className="grid text-center text-black mb-6"
           style={{
             width: `${COMPANY_HEADER_GEOMETRY_MM.headerWidth}mm`,
+            marginLeft: `${COMPANY_HEADER_GEOMETRY_MM.headerIndent}mm`,
             gridTemplateColumns: `${COMPANY_HEADER_GEOMETRY_MM.leftColumn}mm ${COMPANY_HEADER_GEOMETRY_MM.rightColumn}mm`,
             fontFamily: "'Times New Roman', Times, serif",
             lineHeight: 1.15,
@@ -233,16 +250,16 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
         >
           <div>
             <p style={{ fontSize: "12pt" }}>{COMPANY_HEADER_PARENT_LINES[0]}<br />{COMPANY_HEADER_PARENT_LINES[1]}</p>
-            <p className="font-bold" style={{ fontSize: "12pt" }}>{COMPANY_HEADER_ISSUER_LINES[0]}<br />{COMPANY_HEADER_ISSUER_LINES[1]}</p>
+            <p className="font-bold whitespace-nowrap" style={{ fontSize: "12pt" }}>{COMPANY_HEADER_ISSUER_LINES[0]}</p>
             <div className="border-b border-black mx-auto mt-1" style={{ width: "35mm" }} />
           </div>
           <div>
             <p className="font-bold whitespace-nowrap" style={{ fontSize: "12pt" }}>{COMPANY_NATIONAL_HEADER}</p>
             <p className="font-bold" style={{ fontSize: "13pt" }}>{COMPANY_MOTTO}</p>
-            <div className="border-b border-black mx-auto mt-1" style={{ width: "48mm" }} />
+            <div className="border-b border-black mx-auto mt-1" style={{ width: "50.5mm" }} />
           </div>
           <p className="mt-1" style={{ fontSize: "13pt" }}>{doc.referenceNumber || "Số: …/…"}</p>
-          <p className="mt-1 italic" style={{ fontSize: "13pt" }}>{doc.locationAndDate || "Hải Phòng, ngày … tháng … năm …"}</p>
+          <p className="mt-1 italic text-right" style={{ fontSize: "13pt" }}>{doc.locationAndDate || "Hải Phòng, ngày … tháng … năm …"}</p>
         </div>
       )}
       {!hasEmbeddedHeader && !isCompanyHeader && (

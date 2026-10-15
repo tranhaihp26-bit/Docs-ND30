@@ -1,5 +1,5 @@
-/** Organization profile: fixed display header ONLY for newly-created administrative templates.
- * Source of the text and layout: the user-approved Company_HoaTieu_Fixed_Header_A4.docx.
+/** Organization profile: fixed display header for selected company documents.
+ * Source of the visual layout: the original Tieu ngu chuan.docx supplied by the user.
  * Source of legal rule constraints: the user's canonical ND30 repository, not legacy Markdown.
  */
 import {
@@ -9,17 +9,24 @@ import {
 
 export const COMPANY_HEADER_PROFILE_ID = "hoa-tieu-mien-bac-administrative-v1" as const;
 export const COMPANY_HEADER_PARENT_LINES = ["TỔNG CÔNG TY BẢO ĐẢM", "AN TOÀN HÀNG HẢI VIỆT NAM"] as const;
-export const COMPANY_HEADER_ISSUER_LINES = ["CÔNG TY HOA TIÊU", "HÀNG HẢI MIỀN BẮC"] as const;
+export const COMPANY_HEADER_ISSUER_LINES = ["CÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC"] as const;
 export const COMPANY_HEADER_PARENT = COMPANY_HEADER_PARENT_LINES.join(" ");
 export const COMPANY_HEADER_ISSUER = COMPANY_HEADER_ISSUER_LINES.join(" ");
 export const COMPANY_NATIONAL_HEADER = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
 export const COMPANY_MOTTO = "Độc lập - Tự do - Hạnh phúc";
 
+// Measured from the source Word table: 5187 + 5245 twips, indented -874 twips.
+// Its wider footprint is deliberate: both 12 pt bold headings stay on one line
+// while the table remains inside the physical A4 page.
+const SOURCE_TABLE_TWIPS = Object.freeze({ width: 10432, left: 5187, right: 5245, indent: -874 });
+const mm = (twips: number) => twips * 25.4 / 1440;
+
 export const COMPANY_HEADER_GEOMETRY_MM = Object.freeze({
   pageWidth: 210, pageHeight: 297,
   marginTop: 20, marginBottom: 20, marginLeft: 30, marginRight: 15,
-  headerWidth: 165, bodyWidth: 155,
-  leftColumn: 75, rightColumn: 90,
+  headerWidth: mm(SOURCE_TABLE_TWIPS.width), bodyWidth: 155,
+  leftColumn: mm(SOURCE_TABLE_TWIPS.left), rightColumn: mm(SOURCE_TABLE_TWIPS.right),
+  headerIndent: mm(SOURCE_TABLE_TWIPS.indent),
   bodyInset: 5,
 });
 
@@ -51,31 +58,37 @@ const centered = (runs: TextRun[], after = 30) => new Paragraph({
   keepLines: true,
   children: runs,
 });
+const rightAligned = (runs: TextRun[]) => new Paragraph({
+  alignment: AlignmentType.RIGHT,
+  spacing: { line: 240, before: 0, after: 30 },
+  keepLines: true,
+  children: runs,
+});
 
-/** Company header 165 mm = 75 mm issuer + 90 mm national; contains NO visible table grid. */
+/** Company header follows the source Word table; contains NO visible table grid. */
 export function createCompanyHeaderTable(referenceNumber?: string, locationAndDate?: string): Table {
-  const geo = COMPANY_HEADER_GEOMETRY_MM;
   return new Table({
-    width: { size: TW(geo.headerWidth), type: WidthType.DXA },
+    width: { size: SOURCE_TABLE_TWIPS.width, type: WidthType.DXA },
+    indent: { size: SOURCE_TABLE_TWIPS.indent, type: WidthType.DXA },
     layout: TableLayoutType.FIXED,
-    columnWidths: [TW(geo.leftColumn), TW(geo.rightColumn)],
+    columnWidths: [SOURCE_TABLE_TWIPS.left, SOURCE_TABLE_TWIPS.right],
     borders: INVISIBLE,
     rows: [
       new TableRow({
         cantSplit: true,
         children: [
           new TableCell({
-            width: { size: TW(geo.leftColumn), type: WidthType.DXA },
+            width: { size: SOURCE_TABLE_TWIPS.left, type: WidthType.DXA },
             borders: INVISIBLE,
             margins: { top: 0, bottom: 0, left: 0, right: 0 },
             children: [
               centered([RUN(COMPANY_HEADER_PARENT_LINES[0], 12), new TextRun({ break: 1 }), RUN(COMPANY_HEADER_PARENT_LINES[1], 12)]),
-              centered([RUN(COMPANY_HEADER_ISSUER_LINES[0], 12, true), new TextRun({ break: 1 }), RUN(COMPANY_HEADER_ISSUER_LINES[1], 12, true)]),
-              divider(20),
+              centered([RUN(COMPANY_HEADER_ISSUER, 12, true)]),
+              divider(28.25),
             ],
           }),
           new TableCell({
-            width: { size: TW(geo.rightColumn), type: WidthType.DXA },
+            width: { size: SOURCE_TABLE_TWIPS.right, type: WidthType.DXA },
             borders: INVISIBLE,
             margins: { top: 0, bottom: 0, left: 0, right: 0 },
             children: [
@@ -90,14 +103,14 @@ export function createCompanyHeaderTable(referenceNumber?: string, locationAndDa
         cantSplit: true,
         children: [
           new TableCell({
-            width: { size: TW(geo.leftColumn), type: WidthType.DXA },
+            width: { size: SOURCE_TABLE_TWIPS.left, type: WidthType.DXA },
             borders: INVISIBLE,
             children: [centered([RUN(referenceNumber?.trim() || "Số: …/…", 13)])],
           }),
           new TableCell({
-            width: { size: TW(geo.rightColumn), type: WidthType.DXA },
+            width: { size: SOURCE_TABLE_TWIPS.right, type: WidthType.DXA },
             borders: INVISIBLE,
-            children: [centered([RUN(locationAndDate?.trim() || "Hải Phòng, ngày … tháng … năm …", 13, false, true)])],
+            children: [rightAligned([RUN(locationAndDate?.trim() || "Hải Phòng, ngày … tháng … năm …", 13, false, true)])],
           }),
         ],
       }),
