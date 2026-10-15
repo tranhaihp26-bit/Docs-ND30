@@ -16,7 +16,7 @@ async function runTest(id: string, name: string, fn: () => Promise<void> | void)
 
 async function main() {
   console.log("==================================================================");
-  console.log(" DOCS-ND30 STRUCTURAL PARSING & FIELD MAPPING TEST SUITE (SEP-01..16)");
+  console.log(" DOCS-ND30 STRUCTURAL PARSING & FIELD MAPPING TEST SUITE");
   console.log("==================================================================\n");
 
   // Build synthetic 53-block fixture matching Ke_hoach_Hoi_nghi_tong_ket_AT_HH_va_ton_vinh_2026.docx manifest
@@ -346,8 +346,23 @@ async function main() {
     assert.ok(result.body.html.includes("Nội dung kế hoạch"));
   });
 
+  await runTest("SEP-17", "Giữ địa danh và năm từ tiêu ngữ Word có ngày, tháng để trống", () => {
+    const blocks: SourceBlock[] = [{
+      id: "header", index: 0, kind: "table", role: "unclassified",
+      text: "TỔNG CÔNG TY BẢO ĐẢM | CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      tableShape: { rows: 1, columns: 2 },
+      tableData: [[
+        "TỔNG CÔNG TY BẢO ĐẢM\nCÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC\nSố: …/…",
+        "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc\nHải Phòng, ngày        tháng     năm 2026",
+      ]],
+    }];
+    const result = segmentSourceBlocks(blocks, { filename: "Tieu ngu chuan.docx", fileType: "docx" });
+    assert.equal(result.fields.locationAndDate.value, "Hải Phòng, ngày … tháng … năm 2026");
+    assert.equal(result.fields.locationAndDate.status, "ambiguous");
+  });
+
   console.log("\n==================================================================");
-  console.log(" TẤT CẢ KIỂM THỬ PHÂN VÙNG CẤU TRÚC (SEP-01..16) ĐỀU ĐẠT 100%!");
+  console.log(" ĐÃ CHẠY CÁC KIỂM THỬ PHÂN VÙNG CẤU TRÚC");
   console.log("==================================================================\n");
 }
 

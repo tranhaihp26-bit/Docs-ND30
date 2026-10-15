@@ -9,6 +9,10 @@ import {
 } from "lucide-react";
 import { detectEmbeddedSignature, generateND30DocxDocument } from "../utils/docxExport";
 import { preparePreviewDocument, type PreviewDocumentSource } from "../utils/previewDocument.ts";
+import {
+  COMPANY_HEADER_PROFILE_ID, COMPANY_HEADER_GEOMETRY_MM, COMPANY_MOTTO,
+  COMPANY_NATIONAL_HEADER, COMPANY_HEADER_PARENT_LINES, COMPANY_HEADER_ISSUER_LINES,
+} from "../canonical/nd30/companyHeader.ts";
 
 export type DocumentData = PreviewDocumentSource;
 
@@ -38,6 +42,8 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
   isExportingPdf = false,
 }) => {
   const isParty = standardType === "party";
+  const isCompanyHeader = !isParty && doc.headerProfile === COMPANY_HEADER_PROFILE_ID;
+  const isImported = doc.importMetadata?.sourceType === "docx" || doc.importMetadata?.sourceType === "txt";
   const [zoomLevel, setZoomLevel] = useState<number | "auto">("auto");
   const [computedScale, setComputedScale] = useState<number>(mode === "thumbnail" ? 0.48 : 0.85);
   const [renderEngine, setRenderEngine] = useState<"docx_real" | "css_canvas">("docx_real");
@@ -215,7 +221,31 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
       }}
     >
       {/* 1. Header Block (2 columns) */}
-      {!hasEmbeddedHeader && (
+      {!hasEmbeddedHeader && isCompanyHeader && (
+        <div
+          className="grid text-center text-black mb-6"
+          style={{
+            width: `${COMPANY_HEADER_GEOMETRY_MM.headerWidth}mm`,
+            gridTemplateColumns: `${COMPANY_HEADER_GEOMETRY_MM.leftColumn}mm ${COMPANY_HEADER_GEOMETRY_MM.rightColumn}mm`,
+            fontFamily: "'Times New Roman', Times, serif",
+            lineHeight: 1.15,
+          }}
+        >
+          <div>
+            <p style={{ fontSize: "12pt" }}>{COMPANY_HEADER_PARENT_LINES[0]}<br />{COMPANY_HEADER_PARENT_LINES[1]}</p>
+            <p className="font-bold" style={{ fontSize: "12pt" }}>{COMPANY_HEADER_ISSUER_LINES[0]}<br />{COMPANY_HEADER_ISSUER_LINES[1]}</p>
+            <div className="border-b border-black mx-auto mt-1" style={{ width: "35mm" }} />
+          </div>
+          <div>
+            <p className="font-bold whitespace-nowrap" style={{ fontSize: "12pt" }}>{COMPANY_NATIONAL_HEADER}</p>
+            <p className="font-bold" style={{ fontSize: "13pt" }}>{COMPANY_MOTTO}</p>
+            <div className="border-b border-black mx-auto mt-1" style={{ width: "48mm" }} />
+          </div>
+          <p className="mt-1" style={{ fontSize: "13pt" }}>{doc.referenceNumber || "Số: …/…"}</p>
+          <p className="mt-1 italic" style={{ fontSize: "13pt" }}>{doc.locationAndDate || "Hải Phòng, ngày … tháng … năm …"}</p>
+        </div>
+      )}
+      {!hasEmbeddedHeader && !isCompanyHeader && (
         <div className="grid grid-cols-2 text-center mb-6 gap-2 items-start text-black">
           {/* Column 1: Organization Header & Ref Number */}
           <div>
@@ -282,29 +312,33 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           lineHeight: "1.4",
         }}
         dangerouslySetInnerHTML={{
-          __html: DOMPurify.sanitize(bodyHtml || "<p>[Chưa có nội dung văn bản]</p>"),
+          __html: DOMPurify.sanitize(bodyHtml || (isImported ? "" : "<p>[Chưa có nội dung văn bản]</p>")),
         }}
       />
 
       {/* 5. Signature & Recipients Block */}
-      {!hasEmbeddedSignature && (
+      {!hasEmbeddedSignature && (!isImported || Boolean(doc.recipients || doc.signTitle || doc.signName)) && (
         <div className="mt-8 grid grid-cols-2 gap-4 pt-2 items-start break-inside-avoid">
           {/* Left Column: Recipients */}
           <div className="text-[10pt] leading-normal">
-            <p className="font-bold italic">Nơi nhận:</p>
-            <div className="whitespace-pre-line mt-1">
-              {doc.recipients || "- Như trên;\n- Lưu: VT."}
-            </div>
+            {(doc.recipients || !isImported) && <>
+              <p className="font-bold italic">Nơi nhận:</p>
+              <div className="whitespace-pre-line mt-1">
+                {doc.recipients || "- Như trên;\n- Lưu: VT."}
+              </div>
+            </>}
           </div>
 
           {/* Right Column: Sign Title & Name */}
           <div className="text-center">
-            <p className="font-bold uppercase text-[11pt] whitespace-pre-line leading-tight">
-              {doc.signTitle || (isParty ? "T/M CẤP ỦY\nBÍ THƯ" : "TM. CƠ QUAN BAN HÀNH\nGIÁM ĐỐC")}
-            </p>
-            <p className="text-[9.5pt] italic my-2 text-slate-600">(Ký, ghi rõ họ tên và đóng dấu)</p>
-            <div className="h-16"></div>
-            <p className="font-bold text-[11pt]">{doc.signName || "[Họ và tên]"}</p>
+            {(doc.signTitle || doc.signName || !isImported) && <>
+              <p className="font-bold uppercase text-[11pt] whitespace-pre-line leading-tight">
+                {doc.signTitle || (isImported ? "" : isParty ? "T/M CẤP ỦY\nBÍ THƯ" : "TM. CƠ QUAN BAN HÀNH\nGIÁM ĐỐC")}
+              </p>
+              <p className="text-[9.5pt] italic my-2 text-slate-600">(Ký, ghi rõ họ tên và đóng dấu)</p>
+              <div className="h-16"></div>
+              <p className="font-bold text-[11pt]">{doc.signName || (isImported ? "" : "[Họ và tên]")}</p>
+            </>}
           </div>
         </div>
       )}
@@ -481,6 +515,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
         {/* Render Engine 1: DOCX Real Engine (Word .docx rendered via docx-preview) */}
         {renderEngine === "docx_real" && !docxRenderError ? (
           <div
+            key="docx-real"
             className="w-full flex justify-center"
             style={{
               transform: `scale(${computedScale})`,
@@ -502,6 +537,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
         ) : (
           /* Render Engine 2: High-Fidelity CSS A4 Canvas Sheet */
           <div
+            key="css-canvas"
             style={{
               transform: `scale(${computedScale})`,
               transformOrigin: "top center",
@@ -624,6 +660,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           >
             {renderEngine === "docx_real" && !docxRenderError ? (
               <div
+                key="modal-docx-real"
                 style={{
                   transform: `scale(${modalZoom})`,
                   transformOrigin: "top center",
@@ -634,6 +671,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
               </div>
             ) : (
               <div
+                key="modal-css-canvas"
                 style={{
                   transform: `scale(${modalZoom})`,
                   transformOrigin: "top center",

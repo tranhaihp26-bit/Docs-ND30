@@ -21,6 +21,34 @@ const NATIONAL_HEADER_2_REGEX = /Độc lập\s*-\s*Tự do\s*-\s*Hạnh phúc/i
 const DATE_LOCATION_REGEX = /(?:^|\b)([\p{L}\s\.\-]+),\s*ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})(?:\b|$)/u;
 const REF_NUMBER_REGEX = /Số:\s*([^\n\r,;]+)|Số\s*([0-9]+[^\n\r,;]*)/i;
 
+function extractHeaderDate(text: string): Pick<ExtractedField<string>, "value" | "confidence" | "status"> | null {
+  for (const sourceLine of text.split(/\r?\n/)) {
+    const line = sourceLine.trim();
+    const complete = line.match(DATE_LOCATION_REGEX);
+    if (complete) return { value: complete[0].trim(), confidence: "high", status: "extracted" };
+
+    // Word templates commonly leave the day and month blank while retaining
+    // the place and year. Keep those known parts and flag the blanks for review.
+    const partial = line.match(/^([\p{L}\s.\-]+),\s*ngày\s*(.*?)\s*tháng\s*(.*?)\s*năm\s*(.*?)\s*$/u);
+    if (!partial) continue;
+    const location = partial[1].trim();
+    const parts = partial.slice(2).map((part, index) => {
+      const value = part.trim();
+      if (!value || /^[.…]+$/.test(value)) return "…";
+      if (index < 2 && /^\d{1,2}$/.test(value)) return value;
+      if (index === 2 && /^\d{4}$/.test(value)) return value;
+      return null;
+    });
+    if (!location || location.length > 60 || parts.some((part) => part === null)) continue;
+    return {
+      value: `${location}, ngày ${parts[0]} tháng ${parts[1]} năm ${parts[2]}`,
+      confidence: "medium",
+      status: "ambiguous",
+    };
+  }
+  return null;
+}
+
 const SIGN_FORMULAS = [
   "TM.", "T/M.", "KT.", "TL.", "TUQ.",
   "GIÁM ĐỐC", "TỔNG GIÁM ĐỐC", "CHỦ TỊCH", "PHÓ CHỦ TỊCH",
@@ -123,12 +151,10 @@ export function segmentSourceBlocks(
       }
 
       // Parse Location and Date if present in right cell
-      const dateMatch = rightText.match(DATE_LOCATION_REGEX);
+      const dateMatch = extractHeaderDate(rightText);
       if (dateMatch) {
         fields.locationAndDate = {
-          value: dateMatch[0].trim(),
-          confidence: "high",
-          status: "extracted",
+          ...dateMatch,
           sourceBlockIds: [blocks[0].id],
         };
       }
@@ -190,9 +216,9 @@ export function segmentSourceBlocks(
         };
         isHeaderPart = true;
       }
-      const dateMatch = text.match(DATE_LOCATION_REGEX);
+      const dateMatch = extractHeaderDate(text);
       if (dateMatch && !fields.locationAndDate.value) {
-        fields.locationAndDate = { value: dateMatch[0].trim(), confidence: "high", status: "extracted", sourceBlockIds: [b.id] };
+        fields.locationAndDate = { ...dateMatch, sourceBlockIds: [b.id] };
         isHeaderPart = true;
       }
 
@@ -225,13 +251,11 @@ export function segmentSourceBlocks(
     for (let i = nextStartIndex; i < Math.min(nextStartIndex + 3, total); i++) {
       const b = blocks[i];
       if (b.kind === "paragraph" && b.text.trim()) {
-        const dateMatch = b.text.match(DATE_LOCATION_REGEX);
+        const dateMatch = extractHeaderDate(b.text);
         if (dateMatch) {
           b.role = "metadata";
           fields.locationAndDate = {
-            value: dateMatch[0].trim(),
-            confidence: "high",
-            status: "extracted",
+            ...dateMatch,
             sourceBlockIds: [b.id],
           };
           nextStartIndex = Math.max(nextStartIndex, i + 1);

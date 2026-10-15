@@ -8,8 +8,10 @@ import {
 } from "docx";
 
 export const COMPANY_HEADER_PROFILE_ID = "hoa-tieu-mien-bac-administrative-v1" as const;
-export const COMPANY_HEADER_PARENT = "TỔNG CÔNG TY BẢO ĐẢM AN TOÀN HÀNG HẢI VIỆT NAM";
-export const COMPANY_HEADER_ISSUER = "CÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC";
+export const COMPANY_HEADER_PARENT_LINES = ["TỔNG CÔNG TY BẢO ĐẢM", "AN TOÀN HÀNG HẢI VIỆT NAM"] as const;
+export const COMPANY_HEADER_ISSUER_LINES = ["CÔNG TY HOA TIÊU", "HÀNG HẢI MIỀN BẮC"] as const;
+export const COMPANY_HEADER_PARENT = COMPANY_HEADER_PARENT_LINES.join(" ");
+export const COMPANY_HEADER_ISSUER = COMPANY_HEADER_ISSUER_LINES.join(" ");
 export const COMPANY_NATIONAL_HEADER = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
 export const COMPANY_MOTTO = "Độc lập - Tự do - Hạnh phúc";
 
@@ -67,8 +69,8 @@ export function createCompanyHeaderTable(referenceNumber?: string, locationAndDa
             borders: INVISIBLE,
             margins: { top: 0, bottom: 0, left: 0, right: 0 },
             children: [
-              centered([RUN("TỔNG CÔNG TY BẢO ĐẢM", 12), new TextRun({ break: 1 }), RUN("AN TOÀN HÀNG HẢI VIỆT NAM", 12)]),
-              centered([RUN("CÔNG TY HOA TIÊU", 12, true), new TextRun({ break: 1 }), RUN("HÀNG HẢI MIỀN BẮC", 12, true)]),
+              centered([RUN(COMPANY_HEADER_PARENT_LINES[0], 12), new TextRun({ break: 1 }), RUN(COMPANY_HEADER_PARENT_LINES[1], 12)]),
+              centered([RUN(COMPANY_HEADER_ISSUER_LINES[0], 12, true), new TextRun({ break: 1 }), RUN(COMPANY_HEADER_ISSUER_LINES[1], 12, true)]),
               divider(20),
             ],
           }),

@@ -441,6 +441,22 @@ export default function App() {
     setDoc(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleHeaderProfileChange = (profile: "generic" | typeof COMPANY_HEADER_PROFILE_ID) => {
+    if (profile === COMPANY_HEADER_PROFILE_ID && doc.headerProfile !== COMPANY_HEADER_PROFILE_ID) {
+      pushVersion("Trước khi áp dụng profile công ty", doc);
+    }
+    const updated = profile === COMPANY_HEADER_PROFILE_ID
+      ? applyCompanyProfile(doc)
+      : { ...doc, headerProfile: "generic" as const };
+    setDoc(updated);
+    pushVersion(profile === COMPANY_HEADER_PROFILE_ID
+      ? "Áp dụng profile phần đầu Công ty Hoa tiêu Hàng hải miền Bắc"
+      : "Chuyển phần đầu sang tùy chỉnh", updated);
+    setSuccessMsg(profile === COMPANY_HEADER_PROFILE_ID
+      ? "Đã áp dụng phần đầu công ty. Nội dung, số ký hiệu và ngày ban hành được giữ nguyên."
+      : "Đã chuyển sang phần đầu tùy chỉnh; bạn có thể sửa thông tin cơ quan.");
+  };
+
   // Option A: Select template & immediately enter editor (P0-01)
   const applyTemplate = (t: TemplatePreset) => {
     if (JSON.stringify(doc) !== JSON.stringify(versions[0]?.data)) {
@@ -1295,6 +1311,26 @@ export default function App() {
                 </div>
               </div>
 
+              {standardType === "state" && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3">
+                  <label htmlFor="company-header-profile" className="block text-[11px] font-semibold text-slate-800 mb-1">
+                    Profile phần đầu văn bản
+                  </label>
+                  <select
+                    id="company-header-profile"
+                    value={doc.headerProfile === COMPANY_HEADER_PROFILE_ID ? COMPANY_HEADER_PROFILE_ID : "generic"}
+                    onChange={(e) => handleHeaderProfileChange(e.target.value as "generic" | typeof COMPANY_HEADER_PROFILE_ID)}
+                    className="w-full bg-white border border-blue-200 rounded-lg p-2 text-xs text-slate-800"
+                  >
+                    <option value="generic">Phần đầu hiện tại / tùy chỉnh</option>
+                    <option value={COMPANY_HEADER_PROFILE_ID}>Công ty Hoa tiêu Hàng hải miền Bắc — phần đầu cố định</option>
+                  </select>
+                  <p className="text-[11px] text-slate-600 mt-1.5">
+                    Profile công ty dùng tên cơ quan cố định và bố cục 75/90 mm; số ký hiệu, ngày ban hành và nội dung vẫn chỉnh sửa được.
+                  </p>
+                </div>
+              )}
+
               {/* Thể thức cơ quan ban hành */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1305,6 +1341,7 @@ export default function App() {
                     type="text"
                     value={doc.orgHeader1}
                     onChange={(e) => handleFieldChange("orgHeader1", e.target.value.toUpperCase())}
+                    readOnly={standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID}
                     placeholder="VD: BỘ TƯ PHÁP / UBND THÀNH PHỐ"
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
                   />
@@ -1317,6 +1354,7 @@ export default function App() {
                     type="text"
                     value={doc.orgHeader2}
                     onChange={(e) => handleFieldChange("orgHeader2", e.target.value.toUpperCase())}
+                    readOnly={standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID}
                     placeholder="VD: VĂN PHÒNG ỦY BAN / SỞ TƯ PHÁP"
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-bold"
                   />
@@ -1331,6 +1369,7 @@ export default function App() {
                     type="text"
                     value={doc.nationalHeader1}
                     onChange={(e) => handleFieldChange("nationalHeader1", e.target.value)}
+                    readOnly={standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID}
                     className="w-full bg-slate-100 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-bold"
                   />
                 </div>
@@ -1340,6 +1379,7 @@ export default function App() {
                     type="text"
                     value={doc.nationalHeader2}
                     onChange={(e) => handleFieldChange("nationalHeader2", e.target.value)}
+                    readOnly={standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID}
                     placeholder={standardType === "party" ? "Văn bản Đảng không có tiêu ngữ" : "Độc lập - Tự do - Hạnh phúc"}
                     className="w-full bg-slate-100 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-bold"
                   />
