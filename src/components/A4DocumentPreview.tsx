@@ -565,7 +565,14 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
                 </div>
               </div>
             )}
-            <div ref={docxContainerRef} className="docx-preview-wrapper shadow-2xl" />
+            <div
+              ref={(node) => {
+                docxContainerRef.current = node;
+                previewRef.current = node;
+              }}
+              id="printable-document"
+              className="docx-preview-wrapper docx-preview-print-target shadow-2xl"
+            />
           </div>
         ) : (
           /* Render Engine 2: High-Fidelity CSS A4 Canvas Sheet */

@@ -148,7 +148,7 @@ import { segmentSourceBlocks } from "./src/server/structuralSegmenter.ts";
 async function startServer() {
   const app = express();
   app.set("trust proxy", 1);
-  const PORT = 3000;
+  const PORT = Number(process.env.DOCS_ND30_PORT || 3000);
 
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())

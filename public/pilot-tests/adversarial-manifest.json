@@ -1,0 +1,83 @@
+[
+  {
+    "id": "adv-complex-cong-van",
+    "documentType": "Công văn",
+    "scenario": "Nâng cao · nội dung dài, nhiều bảng và phụ lục",
+    "filename": "adv-complex-cong-van.docx",
+    "url": "/pilot-tests/adversarial/adv-complex-cong-van.docx",
+    "testGroup": "complex",
+    "testFocus": "Kiểm tra nhiều trang, thứ tự khối, bảng nội dung, phần ký và bảng phụ lục dài."
+  },
+  {
+    "id": "adv-complex-bien-ban",
+    "documentType": "Biên bản",
+    "scenario": "Nâng cao · danh sách thành phần và kết luận nhiều bảng",
+    "filename": "adv-complex-bien-ban.docx",
+    "url": "/pilot-tests/adversarial/adv-complex-bien-ban.docx",
+    "testGroup": "complex",
+    "testFocus": "Kiểm tra thời gian họp trong thân, danh sách người dự, nhiều chủ đề, hai chữ ký và phụ lục."
+  },
+  {
+    "id": "adv-complex-quyet-dinh",
+    "documentType": "Quyết định",
+    "scenario": "Nâng cao · nhiều điều khoản và phụ lục dài",
+    "filename": "adv-complex-quyet-dinh.docx",
+    "url": "/pilot-tests/adversarial/adv-complex-quyet-dinh.docx",
+    "testGroup": "complex",
+    "testFocus": "Kiểm tra điều khoản lặp, bảng nhiều dòng, ngắt trang, phần ký và phụ lục."
+  },
+  {
+    "id": "adv-format-cong-van",
+    "documentType": "Công văn",
+    "scenario": "Sai thể thức · đầu trang và kiểu chữ không nhất quán",
+    "filename": "adv-format-cong-van.docx",
+    "url": "/pilot-tests/adversarial/adv-format-cong-van.docx",
+    "testGroup": "format-error",
+    "testFocus": "Xác nhận hệ thống giữ nguồn và cảnh báo quốc hiệu, tiêu ngữ, tên cơ quan, căn lề và kiểu chữ sai."
+  },
+  {
+    "id": "adv-format-bien-ban",
+    "documentType": "Biên bản",
+    "scenario": "Sai thể thức · thời gian, bảng ký và phụ lục đặt sai",
+    "filename": "adv-format-bien-ban.docx",
+    "url": "/pilot-tests/adversarial/adv-format-bien-ban.docx",
+    "testGroup": "format-error",
+    "testFocus": "Xác nhận parser giữ nguyên thời gian họp trong thân và không gộp mất bảng ký/phụ lục bất thường."
+  },
+  {
+    "id": "adv-format-quyet-dinh",
+    "documentType": "Quyết định",
+    "scenario": "Sai thể thức · tiêu đề, số hiệu và định dạng trộn",
+    "filename": "adv-format-quyet-dinh.docx",
+    "url": "/pilot-tests/adversarial/adv-format-quyet-dinh.docx",
+    "testGroup": "format-error",
+    "testFocus": "Kiểm tra nhận diện loại văn bản khi tiêu đề viết thường, sai vị trí, số hiệu và kiểu chữ không đồng nhất."
+  },
+  {
+    "id": "adv-data-cong-van",
+    "documentType": "Công văn",
+    "scenario": "Sai dữ liệu · trùng số hiệu và ngày không tồn tại",
+    "filename": "adv-data-cong-van.docx",
+    "url": "/pilot-tests/adversarial/adv-data-cong-van.docx",
+    "testGroup": "data-error",
+    "testFocus": "Đối chiếu 18/81, ngày 31/02/2026 và ngày 05/03/2026; xem parse có giữ các giá trị xung đột để người dùng rà soát."
+  },
+  {
+    "id": "adv-data-bien-ban",
+    "documentType": "Biên bản",
+    "scenario": "Sai dữ liệu · giờ kết thúc, số người và số biên bản mâu thuẫn",
+    "filename": "adv-data-bien-ban.docx",
+    "url": "/pilot-tests/adversarial/adv-data-bien-ban.docx",
+    "testGroup": "data-error",
+    "testFocus": "Đối chiếu 15:00/14:30, 8/9 người và số biên bản 11/17 giữa phần thân/phụ lục."
+  },
+  {
+    "id": "adv-data-quyet-dinh",
+    "documentType": "Quyết định",
+    "scenario": "Sai dữ liệu · số hiệu, ngày hiệu lực và người ký mâu thuẫn",
+    "filename": "adv-data-quyet-dinh.docx",
+    "url": "/pilot-tests/adversarial/adv-data-quyet-dinh.docx",
+    "testGroup": "data-error",
+    "testFocus": "Đối chiếu 04/40, ngày 31/02 và 01/02, tên người ký giữa các phần."
+  }
+]

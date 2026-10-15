@@ -13,8 +13,9 @@
     "test:ai:live": "tsx test/gemini-live-smoke.test.ts",
     "rules:sync": "node scripts/sync_verified_nd30.mjs",
     "test:canonical": "tsx test/nd30-canonical-overlay.test.ts",
-    "test:pilot": "tsx test/pilot-document-types.test.ts && tsx test/minutes-pilot-signature.test.ts && tsx test/pilot-test-documents.test.ts",
+    "test:pilot": "tsx test/pilot-document-types.test.ts && tsx test/minutes-pilot-signature.test.ts && tsx test/pilot-test-documents.test.ts && tsx test/pilot-adversarial-documents.test.ts && tsx test/pdf-color-normalization.test.ts",
     "pilot:generate": "tsx scripts/generate-pilot-documents.ts",
+    "pilot:generate:adversarial": "tsx scripts/generate-pilot-adversarial-documents.ts",
     "test:import:segments": "tsx test/import-segments.test.ts",
     "test:import:ai-audit": "tsx test/import-ai-audit.test.ts"
   },

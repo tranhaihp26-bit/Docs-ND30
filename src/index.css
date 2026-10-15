@@ -114,6 +114,26 @@
     box-sizing: border-box !important;
   }
 
+  #printable-document.docx-preview-print-target {
+    background: transparent !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    min-height: 0 !important;
+    display: block !important;
+  }
+
+  #printable-document.docx-preview-print-target .docx {
+    margin: 0 !important;
+    box-shadow: none !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  #printable-document.docx-preview-print-target .docx:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
   /* Page breaks & Table pagination handling */
   .page-break {
     page-break-after: always !important;

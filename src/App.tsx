@@ -30,7 +30,8 @@ import { formatStandardDate, extractLocation } from "./server/middleware/complia
 import { detectDocumentType } from "./server/parser.ts";
 import { COMPANY_HEADER_PROFILE_ID, COMPANY_HEADER_PARENT_LINES, applyCompanyProfile, matchesCompanyHeader, LOCKED_COMPANY_FIELDS } from "./canonical/nd30/companyHeader.ts";
 import { MINUTES_TEMPLATE, type TemplatePreset } from "./utils/minutesTemplate.ts";
-import { loadPilotTestFile, loadPilotTestManifest, type PilotTestDocument } from "./utils/pilotTestDocuments.ts";
+import { loadPilotTestFile, loadPilotTestCatalog, type PilotTestDocument } from "./utils/pilotTestDocuments.ts";
+import { normalizeOklchColorsInCssValue } from "./utils/cssColor.ts";
 import { ADMINISTRATIVE_DOCUMENT_TYPES, getAdministrativeDocumentStructure, hasAdministrativeHeaderIssueDate, separateEmbeddedSignatureTables, type DocumentSignatureBlock } from "./utils/documentStructure.ts";
 
 export interface DocumentState {
@@ -755,7 +756,7 @@ export default function App() {
     setIsLoadingPilotCatalog(true);
     setErrorMsg("");
     try {
-      const items = await loadPilotTestManifest();
+      const items = await loadPilotTestCatalog();
       setPilotItems(items);
       setSelectedPilotType(items[0].documentType);
       setSelectedPilotId(items[0].id);
@@ -1077,11 +1078,27 @@ export default function App() {
 
     try {
       const element = previewRef.current;
-      const canvas = await html2canvas(element, { 
+      const canvas = await html2canvas(element, {
         scale: 2.0, 
         useCORS: true,
         logging: false,
-        backgroundColor: "#ffffff"
+        backgroundColor: "#ffffff",
+        onclone: (clonedDocument) => {
+          const target = clonedDocument.getElementById("printable-document");
+          if (!target) return;
+          const nodes = [target, ...Array.from(target.querySelectorAll("*"))];
+          for (const node of nodes) {
+            const styles = clonedDocument.defaultView?.getComputedStyle(node);
+            if (!styles) continue;
+            for (let index = 0; index < styles.length; index++) {
+              const property = styles.item(index);
+              const value = styles.getPropertyValue(property);
+              if (value.includes("oklch(")) {
+                (node as HTMLElement).style.setProperty(property, normalizeOklchColorsInCssValue(value), "important");
+              }
+            }
+          }
+        },
       });
 
       const pdf = new jsPDF("p", "mm", "a4");
@@ -1309,7 +1326,7 @@ export default function App() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2"><FlaskConical className="w-4 h-4 text-violet-700" />Bộ tài liệu pilot Nghị định 30</h2>
-                    <p className="text-xs text-slate-600 mt-1">87 DOCX giả lập · 3 tình huống cho mỗi loại · nạp qua cùng luồng parse như tệp tải lên</p>
+                    <p className="text-xs text-slate-600 mt-1">96 DOCX giả lập · 87 ca chuẩn và 9 ca nâng cao (phức tạp, sai thể thức, mâu thuẫn dữ liệu) · nạp qua cùng luồng parse như tệp tải lên</p>
                   </div>
                   <span className="text-[11px] text-violet-800 bg-violet-50 border border-violet-100 rounded px-2 py-1">Không chứa hồ sơ thật</span>
                 </div>
@@ -1333,7 +1350,7 @@ export default function App() {
                     {isLoadingPilotFile || isUploading ? "Đang nạp và parse…" : "Nạp vào trình soạn thảo"}
                   </button>
                 </div>}
-                {selectedPilot && <p className="text-[11px] text-slate-500">Tệp được chọn: <span className="font-medium text-slate-700">{selectedPilot.filename}</span>. Các trường, phần nội dung, chữ ký, nơi nhận và phụ lục sẽ được đưa vào vùng soạn thảo/đối chiếu tương ứng.</p>}
+                {selectedPilot && <p className="text-[11px] text-slate-500">Tệp được chọn: <span className="font-medium text-slate-700">{selectedPilot.filename}</span>. {selectedPilot.testFocus ? <><span className="font-semibold text-violet-800">Mục tiêu ca thử:</span> {selectedPilot.testFocus} </> : null}Các trường, phần nội dung, chữ ký, nơi nhận và phụ lục sẽ được đưa vào vùng soạn thảo/đối chiếu tương ứng.</p>}
               </section>}
 
               {/* Thư viện mẫu chỉ mở khi người dùng chọn. */}

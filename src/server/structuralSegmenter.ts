@@ -28,6 +28,20 @@ function extractHeaderDate(text: string): Pick<ExtractedField<string>, "value" |
     const complete = line.match(DATE_LOCATION_REGEX);
     if (complete) return { value: complete[0].trim(), confidence: "high", status: "extracted" };
 
+    // Keep malformed header dates as reviewable date candidates instead of
+    // allowing them to fall through and be mistaken for an organization name.
+    const numericDate = line.match(/^([\p{L}\s.\-]+?),?\s*ngày\s+(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{4})\s*$/iu);
+    if (numericDate) {
+      const location = numericDate[1].trim();
+      if (location && location.length <= 60) {
+        return {
+          value: `${location}, ngày ${numericDate[2]} tháng ${numericDate[3]} năm ${numericDate[4]}`,
+          confidence: "medium",
+          status: "ambiguous",
+        };
+      }
+    }
+
     // Word templates commonly leave the day and month blank while retaining
     // the place and year. Keep those known parts and flag the blanks for review.
     const partial = line.match(/^([\p{L}\s.\-]+),\s*ngày\s*(.*?)\s*tháng\s*(.*?)\s*năm\s*(.*?)\s*$/u);
@@ -167,6 +181,11 @@ export function segmentSourceBlocks(
       const leftLines = leftText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
       const filteredLines: string[] = [];
       for (const line of leftLines) {
+        const dateCandidate = !fields.locationAndDate.value ? extractHeaderDate(line) : null;
+        if (dateCandidate) {
+          fields.locationAndDate = { ...dateCandidate, sourceBlockIds: [blocks[0].id] };
+          continue;
+        }
         const refMatch = line.match(REF_NUMBER_REGEX);
         if (refMatch) {
           fields.referenceNumber = {
