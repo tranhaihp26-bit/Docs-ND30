@@ -207,6 +207,17 @@ export function segmentSourceBlocks(
     }
   }
 
+  // Plain text documents often put the title before the reference/date. Keep
+  // these early metadata lines even when the header scanner stopped at title.
+  if (options.fileType === "txt" && !fields.referenceNumber.value) {
+    for (const block of blocks.slice(0, Math.min(6, total))) {
+      if (block.kind !== "paragraph" || !/^Số\s*:/i.test(block.text.trim())) continue;
+      fields.referenceNumber = { value: block.text.trim(), confidence: "high", status: "extracted", sourceBlockIds: [block.id] };
+      block.role = "metadata";
+      break;
+    }
+  }
+
   // =========================================================================
   // STEP 2: DATE & LOCATION (if not in header)
   // =========================================================================
@@ -239,7 +250,8 @@ export function segmentSourceBlocks(
   ];
 
   let docTypeIndex = -1;
-  for (let i = nextStartIndex; i < Math.min(nextStartIndex + 5, total); i++) {
+  const docTypeSearchStart = options.fileType === "txt" ? 0 : nextStartIndex;
+  for (let i = docTypeSearchStart; i < Math.min(docTypeSearchStart + 8, total); i++) {
     const b = blocks[i];
     if (b.kind !== "paragraph") continue;
     const text = b.text.trim().toUpperCase();
@@ -272,7 +284,7 @@ export function segmentSourceBlocks(
       sourceBlockIds: [],
     };
   } else {
-    nextStartIndex = docTypeIndex + 1;
+    nextStartIndex = Math.max(nextStartIndex, docTypeIndex + 1);
   }
 
   // Subject extraction (block following documentType)
@@ -331,13 +343,16 @@ export function segmentSourceBlocks(
       const headingBlock = appBlocks[0];
       let title = headingBlock.text.trim();
       let refText = "";
+      let contentStart = 1;
 
       if (appBlocks.length > 1 && appBlocks[1].kind === "paragraph") {
         const nextText = appBlocks[1].text.trim();
         if (/^(Kèm theo|Ban hành kèm theo|\(Kèm theo)/i.test(nextText)) {
           refText = nextText;
+          contentStart = 2;
         } else if (!title.includes(":") && title.length < 30) {
           title = `${title}: ${nextText}`;
+          contentStart = 2;
         }
       }
 
@@ -356,7 +371,7 @@ export function segmentSourceBlocks(
         id: `appendix-${aIdx + 1}`,
         title: title || `Phụ lục ${aIdx + 1}`,
         referenceText: refText,
-        html: appBlocks.map(b => b.html || `<p>${b.text}</p>`).join(""),
+        html: appBlocks.slice(contentStart).map(b => b.html || `<p>${b.text}</p>`).join(""),
         blocks: appBlocks,
         sourceBlockIds: appBlocks.map(b => b.id),
         extractionStatus: "confirmed",

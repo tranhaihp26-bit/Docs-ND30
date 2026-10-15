@@ -191,7 +191,7 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
       {/* 1. Thanh công cụ cấp cao: Thể thức NĐ 30 / HD 05 */}
       <div className="bg-slate-100 border-b border-slate-200 p-2 flex flex-wrap items-center gap-1.5 text-xs">
         <span className="font-bold text-slate-700 px-2 py-1 flex items-center gap-1 border-r border-slate-300 mr-1">
-          <Scale className="w-3.5 h-3.5 text-blue-600" /> Chuẩn NĐ 30:
+          <Scale className="w-3.5 h-3.5 text-blue-600" /> {isParty ? "Chuẩn HD 05:" : "Chuẩn NĐ 30:"}
         </span>
 
         {/* Nút Chèn Quốc hiệu / Tiêu ngữ */}

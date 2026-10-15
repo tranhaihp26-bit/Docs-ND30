@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { detectEmbeddedSignature, generateND30DocxDocument } from "../utils/docxExport";
 import { enforceND30Standards } from "../server/middleware/compliance.middleware";
+import type { SourceBlock } from "../shared/schemas/document.schema.ts";
 
 export interface DocumentData {
   orgHeader1?: string;
@@ -25,6 +26,7 @@ export interface DocumentData {
   signName?: string;
   regime?: "administrative" | "party";
   appendices?: any[];
+  unclassified?: SourceBlock[];
 }
 
 export interface A4DocumentPreviewProps {
@@ -133,12 +135,6 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           trimXmlDeclaration: true,
           debug: false,
         });
-
-        // Count rendered pages
-        const pages = docxContainerRef.current.querySelectorAll("section.docx");
-        if (pages.length > 0 && isMounted) {
-          setPageCount(pages.length);
-        }
 
         setDocxRenderError(false);
       } catch (err) {
@@ -358,6 +354,17 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           ))}
         </div>
       )}
+      {Boolean(doc.unclassified?.length) && (
+        <div className="mt-12 pt-8 border-t border-amber-300 space-y-3">
+          <h3 className="font-bold text-amber-900">KHỐI CHƯA PHÂN LOẠI — CẦN ĐỐI CHIẾU BẢN GỐC</h3>
+          {doc.unclassified?.map((block) => (
+            <div key={block.id}>
+              <p className="font-semibold">Khối #{block.index + 1} ({block.kind})</p>
+              <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.html || `<p>${block.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`) }} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -388,7 +395,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           </span>
           <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium border border-slate-200 flex items-center gap-1">
             <Layers className="w-3 h-3 text-slate-500" />
-            {pageCount} trang
+            {renderEngine === "docx_real" && !docxRenderError ? "Bản xem DOCX" : `Khoảng ${pageCount} trang (ước tính)`}
           </span>
 
           {mode === "full" && (

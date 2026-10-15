@@ -328,7 +328,8 @@ export async function extractBlocksFromDocx(buffer: Buffer): Promise<ExtractedBl
  * Extracts SourceBlocks from plain text (.txt) buffer.
  */
 export function extractBlocksFromTxt(textContent: string): ExtractedBlocksResult {
-  const lines = textContent.split(/\r?\n/);
+  const normalizedText = textContent.replace(/^\uFEFF/, "");
+  const lines = normalizedText.split(/\r?\n/);
   const blocks: SourceBlock[] = [];
   let idx = 0;
 
@@ -349,7 +350,7 @@ export function extractBlocksFromTxt(textContent: string): ExtractedBlocksResult
 
   return {
     blocks,
-    rawText: textContent,
+    rawText: normalizedText,
     rawHtml: blocks.map((b) => b.html || "").join(""),
     fileType: "txt",
   };

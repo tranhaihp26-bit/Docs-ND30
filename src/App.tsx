@@ -13,6 +13,7 @@ import ND30Editor from "./components/ND30Editor.tsx";
 import { A4DocumentPreview } from "./components/A4DocumentPreview.tsx";
 import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
 import { parseImportResponse } from "./utils/importState.ts";
+import { deriveImportStatus, updateImportField } from "./utils/importReview.ts";
 import { 
   type DocumentFormatType, 
   validateND30Compliance, 
@@ -54,6 +55,7 @@ interface Version {
   timestamp: string;
   title: string;
   data: DocumentState;
+  standardType: "state" | "party";
 }
 
 interface TemplatePreset {
@@ -255,7 +257,7 @@ const TEMPLATES: TemplatePreset[] = [
         <p><strong><em>Căn cứ Điều lệ Đảng Cộng sản Việt Nam;</em></strong></p>
         <p><strong><em>Căn cứ Quy chế làm việc của [Tên cấp ủy ban hành];</em></strong></p>
         <p style="text-align: center;"><strong>[TÊN CẤP ỦY] NGHỊ QUYẾT:</strong></p>
-        <p><strong>1. Đánh giá tình hình:</strong> [Nội dung đánh giá tình hình thực hiện nhiệm vụ political/xây dựng Đảng...].</p>
+        <p><strong>1. Đánh giá tình hình:</strong> [Nội dung đánh giá tình hình thực hiện nhiệm vụ chính trị, xây dựng Đảng...].</p>
         <p><strong>2. Mục tiêu, nhiệm vụ trọng tâm:</strong> [Mục tiêu và các nhiệm vụ chủ yếu kỳ tới...].</p>
         <p><strong>3. Tổ chức thực hiện:</strong> Các cấp ủy, tổ chức đảng trực thuộc chịu trách nhiệm quán triệt và xây dựng chương trình hành động thực hiện nghiêm túc Nghị quyết này./.</p>
       `,
@@ -365,6 +367,8 @@ export default function App() {
 
   // Structured Import state
   const [structuredImport, setStructuredImport] = useState<StructuredImport | null>(null);
+  const [importReviewAccepted, setImportReviewAccepted] = useState(false);
+  const [pendingTemplate, setPendingTemplate] = useState<TemplatePreset | null>(null);
 
   // Compliance Inspection Modal state
   const [showComplianceModal, setShowComplianceModal] = useState(false);
@@ -398,7 +402,8 @@ export default function App() {
       id: "v_init",
       timestamp: new Date().toLocaleTimeString("vi-VN") + " " + new Date().toLocaleDateString("vi-VN"),
       title: "Khởi tạo mặc định (Quyết định NĐ 30)",
-      data: applyCompanyProfile(TEMPLATES[0].defaultData)
+      data: applyCompanyProfile(TEMPLATES[0].defaultData),
+      standardType: "state",
     }
   ]);
 
@@ -419,12 +424,13 @@ export default function App() {
     setComplianceReport(report);
   }, [doc, standardType]);
 
-  const pushVersion = (title: string, newDoc: DocumentState) => {
+  const pushVersion = (title: string, newDoc: DocumentState, versionStandardType: "state" | "party" = standardType) => {
     const newV: Version = {
-      id: "v_" + Date.now(),
+      id: "v_" + crypto.randomUUID(),
       timestamp: new Date().toLocaleTimeString("vi-VN") + " " + new Date().toLocaleDateString("vi-VN"),
       title,
-      data: { ...newDoc }
+      data: { ...newDoc },
+      standardType: versionStandardType,
     };
     setVersions(prev => [newV, ...prev]);
   };
@@ -436,15 +442,27 @@ export default function App() {
   };
 
   // Option A: Select template & immediately enter editor (P0-01)
-  const selectTemplate = (tId: string) => {
-    const t = TEMPLATES.find(x => x.id === tId);
-    if (!t) return;
+  const applyTemplate = (t: TemplatePreset) => {
+    if (JSON.stringify(doc) !== JSON.stringify(versions[0]?.data)) {
+      pushVersion("Bản soạn trước khi đổi mẫu", doc);
+    }
     setStandardType(t.type);
     const selectedDoc = t.type === "state" ? applyCompanyProfile({...t.defaultData}) : {...t.defaultData, headerProfile: "generic" as const};
     setDoc(selectedDoc);
-    pushVersion(`Áp dụng mẫu: ${t.name}`, selectedDoc);
+    pushVersion(`Áp dụng mẫu: ${t.name}`, selectedDoc, t.type);
     setSuccessMsg(`Đã tải mẫu "${t.name}". Bạn có thể bắt đầu soạn thảo và chỉnh sửa ngay!`);
     setActiveTab("editor");
+    setPendingTemplate(null);
+  };
+
+  const selectTemplate = (tId: string) => {
+    const t = TEMPLATES.find(x => x.id === tId);
+    if (!t) return;
+    if (JSON.stringify(doc) !== JSON.stringify(versions[0]?.data)) {
+      setPendingTemplate(t);
+      return;
+    }
+    applyTemplate(t);
   };
 
   // Option B: File Upload handler (.docx, .txt)
@@ -501,6 +519,7 @@ export default function App() {
       setRawText(parsed.text);
       setUploadedHtml(DOMPurify.sanitize(parsed.html));
       setStructuredImport(parsed.structured);
+      setImportReviewAccepted(false);
       setUploadedFileName(parsed.filename); // Set filename only after successful parse
       setUploadedFileType(parsed.fileType); // Set fileType from validated response
 
@@ -546,6 +565,10 @@ export default function App() {
 
   // Direct import to editor using structural segmentation (P0-01, P0-02, P0-B, P0-C)
   const handleDirectImportToEditor = () => {
+    if (structuredImport && !importReviewAccepted) {
+      setErrorMsg("Vui lòng kiểm tra và xác nhận các phần đã trích xuất trước khi soạn thảo.");
+      return;
+    }
     if (!uploadedHtml && !rawText && !structuredImport) {
       setErrorMsg("Chưa có nội dung tệp tin để đưa vào trình soạn thảo.");
       return;
@@ -556,6 +579,7 @@ export default function App() {
       const detectedType = fields.documentType?.value || detectDocumentType(rawText || uploadedHtml, standardType);
 
       const newDoc: DocumentState = {
+        headerProfile: "generic",
         orgHeader1: fields.orgHeader1?.value || "",
         orgHeader2: fields.orgHeader2?.value || "",
         nationalHeader1: fields.nationalHeader1?.value || (standardType === "party" ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"),
@@ -563,8 +587,8 @@ export default function App() {
         locationAndDate: fields.locationAndDate?.value || "",
         documentType: detectedType,
         referenceNumber: fields.referenceNumber?.value || "",
-        subject: fields.subject?.value || (uploadedFileName ? `Trích xuất từ tệp ${uploadedFileName}` : ""),
-        bodyHtml: structuredImport.body.html || uploadedHtml,
+        subject: fields.subject?.value || "",
+        bodyHtml: structuredImport.body.html,
         signTitle: fields.signTitle?.value || "",
         signName: fields.signName?.value || "",
         recipients: fields.recipients?.value || "",
@@ -572,13 +596,13 @@ export default function App() {
         unclassified: structuredImport.unclassified || [],
         importMetadata: {
           sourceType: uploadedFileType || "docx",
-          status: "confirmed",
+          status: deriveImportStatus(structuredImport, importReviewAccepted),
           sourceFilename: uploadedFileName,
         }
       };
       setDoc(newDoc);
       pushVersion(`Nhập phân vùng từ tệp ${uploadedFileName || "văn bản"}`, newDoc);
-      setSuccessMsg(`Đã phân tích cấu trúc và đưa tài liệu (${detectedType}) vào trình soạn thảo thành công! (${newDoc.appendices?.length || 0} phụ lục)`);
+      setSuccessMsg(`Đã đưa tài liệu (${detectedType}) vào trình soạn thảo. ${newDoc.importMetadata?.status === "needs_review" ? "Còn phần chưa phân loại hoặc cần đối chiếu với bản gốc trước khi xuất." : "Đã xác nhận các phần trích xuất."}`);
       setActiveTab("editor");
       return;
     }
@@ -611,6 +635,10 @@ export default function App() {
 
   // Direct raw text import to editor without AI (P0-01)
   const handleRawTextToEditor = () => {
+    if (structuredImport && uploadedFileName) {
+      setErrorMsg("Tệp đã được phân vùng. Vui lòng kiểm tra các vùng trích xuất và dùng nút nhập tệp ở phía trên.");
+      return;
+    }
     if (!rawText.trim()) {
       setErrorMsg("Vui lòng dán hoặc nhập nội dung văn bản trước.");
       return;
@@ -640,6 +668,10 @@ export default function App() {
 
   // Optional AI Structuring & Formatting (P0-04: AI is optional, confirms before overwrite)
   const handleAiFormat = async () => {
+    if (structuredImport && uploadedFileName) {
+      setErrorMsg("Hãy kiểm tra và nhập các phần của tệp vào Soạn thảo trước. Sau đó có thể dùng AI tinh chỉnh nội dung; AI sẽ không được thay cấu trúc tệp đã tải lên.");
+      return;
+    }
     if (!rawText.trim()) {
       setErrorMsg("Vui lòng tải lên tệp tin hoặc dán nội dung văn bản thô để AI xử lý.");
       return;
@@ -785,7 +817,10 @@ export default function App() {
                       isPlaceholderValue(doc.referenceNumber) || 
                       isPlaceholderValue(doc.signName) || 
                       doc.locationAndDate.includes("...") ||
-                      !doc.orgHeader2;
+                      !doc.orgHeader2 ||
+                      doc.importMetadata?.status === "needs_review" ||
+                      Boolean(doc.unclassified?.length) ||
+                      Boolean(doc.appendices?.some(appendix => appendix.extractionStatus === "needs_review"));
 
       await generateAndDownloadDocx(documentData);
       
@@ -853,6 +888,7 @@ export default function App() {
 
   const restoreVersion = (v: Version) => {
     setDoc(v.data);
+    setStandardType(v.standardType);
     setSuccessMsg(`Đã khôi phục thành công phiên bản: "${v.title}" (${v.timestamp})`);
     setActiveTab("editor");
   };
@@ -938,7 +974,7 @@ export default function App() {
           <button
             onClick={() => setShowComplianceModal(true)}
             className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
-            title="Kiểm tra các tiêu chuẩn thể thức Nghị định 30"
+            title={standardType === "party" ? "Kiểm tra thể thức theo Hướng dẫn 05-HD/VPTW" : "Kiểm tra thể thức theo Nghị định 30/2020/NĐ-CP"}
           >
             <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
             <span>Thể thức: </span>
@@ -952,7 +988,7 @@ export default function App() {
             onClick={exportToDocx}
             disabled={isExportingDocx}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-            title="Tải tệp Microsoft Word (.docx) chuẩn Nghị định 30"
+            title={standardType === "party" ? "Tải tệp Word theo Hướng dẫn 05-HD/VPTW" : "Tải tệp Word theo Nghị định 30/2020/NĐ-CP"}
           >
             <Download className="w-3.5 h-3.5" />
             <span>{isExportingDocx ? "Đang tạo..." : "Xuất Word (.docx)"}</span>
@@ -1093,27 +1129,71 @@ export default function App() {
                   <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between text-xs text-emerald-900">
                       <span className="font-semibold">Nội dung đã sẵn sàng ({rawText.length} ký tự):</span>
-                      <span className="text-[11px] text-emerald-700 italic">Chọn cách xử lý tiếp theo:</span>
+                      <span className="text-[11px] text-emerald-700 italic">Kiểm tra trước khi soạn thảo</span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {structuredImport && (
+                      <div className="bg-white border border-emerald-200 rounded-lg p-3 space-y-3 text-xs">
+                        <p className="font-semibold text-slate-900">Đối chiếu các vùng trích xuất với tệp gốc ({structuredImport.source.blockCount} khối)</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {([
+                            ["orgHeader1", "Cơ quan cấp trên"], ["orgHeader2", "Cơ quan ban hành"],
+                            ["nationalHeader1", "Quốc hiệu / Đảng hiệu"], ["nationalHeader2", "Tiêu ngữ"],
+                            ["locationAndDate", "Địa danh, ngày tháng"], ["documentType", "Loại văn bản"],
+                            ["referenceNumber", "Số, ký hiệu"], ["subject", "Trích yếu"],
+                            ["signTitle", "Chức vụ người ký"], ["signName", "Họ tên người ký"],
+                            ["recipients", "Nơi nhận"],
+                          ] as const).map(([key, label]) => {
+                            const field = structuredImport.fields[key];
+                            return (
+                              <label key={key} className="block text-slate-700">
+                                <span className="font-medium">{label}</span>
+                                <span className={`ml-2 text-[10px] ${field?.status === "missing" || field?.status === "ambiguous" ? "text-amber-700" : "text-emerald-700"}`}>
+                                  {field?.status === "missing" ? "Chưa tìm thấy" : field?.status === "ambiguous" ? "Cần kiểm tra" : field?.status === "user_confirmed" ? "Đã sửa" : `Trích xuất (${field?.confidence || "?"})`}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={field?.value || ""}
+                                  onChange={(e) => {
+                                    setStructuredImport(prev => prev ? updateImportField(prev, key, e.target.value) : prev);
+                                    setImportReviewAccepted(false);
+                                  }}
+                                  className="mt-1 w-full border border-slate-300 rounded px-2 py-1.5 text-slate-900"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <div className="border-t border-slate-200 pt-2 space-y-1 text-slate-700">
+                          <p><strong>Nội dung chính:</strong> {structuredImport.body.sourceBlockIds.length} khối</p>
+                          <p className="max-h-24 overflow-auto whitespace-pre-wrap break-words bg-slate-50 p-2 rounded">{structuredImport.body.html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 800) || "(Trống)"}</p>
+                          <p><strong>Phụ lục:</strong> {structuredImport.appendices.length}</p>
+                          {structuredImport.appendices.map((appendix, index) => (
+                            <p key={appendix.id} className="pl-2">{index + 1}. {appendix.title || "Chưa có tiêu đề"} · {appendix.blocks.length} khối · {appendix.extractionStatus === "needs_review" ? "Cần kiểm tra" : "Đã nhận diện"}</p>
+                          ))}
+                          <p className={structuredImport.unclassified.length ? "text-amber-800 font-semibold" : ""}>
+                            Khối chưa phân loại: {structuredImport.unclassified.length}
+                          </p>
+                          {structuredImport.unclassified.map((block) => (
+                            <p key={block.id} className="pl-2 whitespace-pre-wrap break-words">#{block.index + 1} ({block.kind}): {block.text.slice(0, 240) || "[Khối không có văn bản]"}</p>
+                          ))}
+                        </div>
+                        <label className="flex items-start gap-2 text-slate-800 border-t border-slate-200 pt-2">
+                          <input type="checkbox" checked={importReviewAccepted} onChange={(e) => setImportReviewAccepted(e.target.checked)} className="mt-0.5" />
+                          <span>Tôi đã đối chiếu các trường, nội dung chính, phụ lục và khối chưa phân loại với tệp gốc. Các phần cần kiểm tra tiếp sẽ được giữ trong bản soạn thảo.</span>
+                        </label>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-3">
                       {/* Nút 1: Đưa trực tiếp vào editor không dùng AI (P0-02) */}
                       <button
                         onClick={handleDirectImportToEditor}
-                        className="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 p-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2 shadow-2xs"
+                        disabled={Boolean(structuredImport) && !importReviewAccepted}
+                        className="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 p-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2 shadow-2xs disabled:opacity-50"
                       >
                         <Edit3 className="w-4 h-4 text-emerald-600" />
-                        <span>1. Đưa trực tiếp vào Soạn thảo (Không dùng AI)</span>
-                      </button>
-
-                      {/* Nút 2: Gọi AI phân tích và chuẩn hóa thể thức (Tùy chọn) */}
-                      <button
-                        onClick={handleAiFormat}
-                        disabled={isAiLoading}
-                        className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
-                      >
-                        <Sparkles className="w-4 h-4 text-yellow-300" />
-                        <span>{isAiLoading ? "AI đang phân tích..." : "2. Nhờ AI cấu trúc hóa thể thức NĐ 30"}</span>
+                        <span>Đưa các phần đã kiểm tra vào Soạn thảo</span>
                       </button>
                     </div>
                   </div>
@@ -1133,7 +1213,14 @@ export default function App() {
                 <textarea
                   rows={5}
                   value={rawText}
-                  onChange={(e) => setRawText(e.target.value)}
+                  onChange={(e) => {
+                    setRawText(e.target.value);
+                    setUploadedFileName("");
+                    setUploadedHtml("");
+                    setUploadedFileType(null);
+                    setStructuredImport(null);
+                    setImportReviewAccepted(false);
+                  }}
                   placeholder="Dán nội dung văn bản cần biên tập vào đây..."
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:border-blue-500 font-sans leading-relaxed"
                 />
@@ -1169,7 +1256,7 @@ export default function App() {
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   <button
                     onClick={handleRawTextToEditor}
-                    disabled={!rawText.trim()}
+                      disabled={!rawText.trim() || Boolean(structuredImport && uploadedFileName)}
                     className="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-xs shadow-xs disabled:opacity-50"
                   >
                     <Edit3 className="w-4 h-4" />
@@ -1178,7 +1265,7 @@ export default function App() {
 
                   <button
                     onClick={handleAiFormat}
-                    disabled={isAiLoading || !rawText.trim()}
+                    disabled={isAiLoading || !rawText.trim() || Boolean(structuredImport && uploadedFileName)}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-xs shadow-xs disabled:opacity-50"
                   >
                     <Sparkles className="w-4 h-4 text-yellow-300" />
@@ -1354,7 +1441,7 @@ export default function App() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-[11px] font-semibold text-slate-700">
-                    Nội dung chi tiết (Trình soạn thảo quy chuẩn NĐ 30):
+                    Nội dung chi tiết (Trình soạn thảo {standardType === "party" ? "HD 05" : "NĐ 30"}):
                   </label>
                   <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px]">
                     <button
@@ -1547,6 +1634,27 @@ export default function App() {
                 )}
               </div>
 
+              {Boolean(doc.unclassified?.length) && (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-2">
+                  <h3 className="text-xs font-bold text-amber-950">Khối chưa phân loại ({doc.unclassified?.length}) — cần đối chiếu tệp gốc</h3>
+                  <p className="text-xs text-amber-900">Các khối này sẽ được giữ ở cuối bản Word dưới nhãn cần kiểm tra. Có thể chuyển khối phù hợp vào nội dung chính.</p>
+                  {doc.unclassified?.map((block) => (
+                    <div key={block.id} className="bg-white border border-amber-200 rounded-lg p-2 text-xs space-y-2">
+                      <p className="text-slate-800 whitespace-pre-wrap break-words">#{block.index + 1} ({block.kind}): {block.text || "[Khối không có văn bản]"}</p>
+                      <button type="button" className="text-blue-700 underline" onClick={() => {
+                        const html = block.html || safeTextToHtml(block.text);
+                        setDoc(prev => ({
+                          ...prev,
+                          bodyHtml: `${prev.bodyHtml || ""}${html}`,
+                          unclassified: (prev.unclassified || []).filter(item => item.id !== block.id),
+                          importMetadata: prev.importMetadata ? { ...prev.importMetadata, status: "needs_review" } : prev.importMetadata,
+                        }));
+                      }}>Chuyển vào cuối nội dung chính</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Bottom Actions */}
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <button
@@ -1606,7 +1714,7 @@ export default function App() {
                 <span className="text-xs text-slate-500 font-medium">{versions.length} phiên bản đã ghi nhận</span>
               </div>
               <p className="text-xs text-slate-500">
-                Toàn bộ các thao tác chọn mẫu, nạp file, chạy AI hoặc sửa thủ công đều được lưu lại an toàn trên máy khách để phục hồi khi cần.
+                Các phiên bản được giữ trong phiên làm việc hiện tại. Hãy xuất Word trước khi tải lại hoặc đóng trang.
               </p>
 
               <div className="space-y-2.5 mt-2">
@@ -1851,6 +1959,19 @@ export default function App() {
               >
                 <Check className="w-4 h-4" /> Đồng ý áp dụng vào văn bản
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingTemplate && (
+        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Xác nhận đổi mẫu">
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4">
+            <h3 className="font-bold text-slate-900">Đổi sang mẫu {pendingTemplate.name}?</h3>
+            <p className="text-sm text-slate-700">Bản đang soạn có thay đổi chưa ghi vào lịch sử. Khi tiếp tục, hệ thống sẽ lưu một phiên bản trước khi thay mẫu để bạn có thể khôi phục.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setPendingTemplate(null)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">Tiếp tục soạn bản hiện tại</button>
+              <button type="button" onClick={() => applyTemplate(pendingTemplate)} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">Lưu phiên bản và đổi mẫu</button>
             </div>
           </div>
         </div>

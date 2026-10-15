@@ -204,6 +204,8 @@ async function main() {
     assert.strictEqual(result.appendices[0].tables[0].columns, 3, "Bảng 1 có 3 cột");
     assert.strictEqual(result.appendices[0].tables[1].rows, 8, "Bảng 2 có 8 hàng");
     assert.strictEqual(result.appendices[0].tables[1].columns, 3, "Bảng 2 có 3 cột");
+    assert.ok(!result.appendices[0].html.includes("<strong>PHỤ LỤC</strong>"), "Tiêu đề phụ lục không lặp trong phần nội dung xuất Word");
+    assert.ok(!result.appendices[0].html.includes("(Kèm theo Kế hoạch số"), "Dòng liên kết phụ lục không lặp trong phần nội dung xuất Word");
   });
 
   // TEST SEP-02: bodyHtml chỉ chứa thân chính, không lẫn header, signature, appendix

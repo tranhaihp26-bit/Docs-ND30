@@ -10,6 +10,8 @@
 
 **Spec:** [Audit mức sẵn sàng sản phẩm](../../audits/2026-10-15-product-readiness.md).
 
+**Ưu tiên triển khai cập nhật:** [Workflow theo kiểm toán bổ sung của người dùng](../../audits/2026-10-15-workflow-priority.md). Sau Task 1, xử lý lần lượt trích xuất OOXML → phân vùng và review → AI không phá phân vùng → Preview/DOCX/PDF → lưu nháp. Các mục CI/tối ưu nền chuyển sau khi luồng người dùng đạt.
+
 ## Global Constraints
 
 - Bản phát hành đầu chỉ phục vụ nội bộ Công ty Hoa tiêu Hàng hải miền Bắc; giữ hồ sơ đầu trang công ty cho mẫu hành chính mới, giữ nguyên danh tính của văn bản nhập.

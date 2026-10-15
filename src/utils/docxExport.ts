@@ -21,7 +21,7 @@ import {
   WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip, PageOrientation,
   Header, PageNumber, LevelFormat, PageBreak
 } from "docx";
-import { type DocumentFormatType, isPlaceholderValue } from "../shared/schemas/document.schema.ts";
+import { type DocumentFormatType, type SourceBlock, isPlaceholderValue } from "../shared/schemas/document.schema.ts";
 import { COMPANY_HEADER_PROFILE_ID, createCompanyHeaderTable, COMPANY_HEADER_GEOMETRY_MM } from "../canonical/nd30/companyHeader.ts";
 
 /**
@@ -921,6 +921,23 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                 ] : []),
                 ...convertHtmlToDocxElements(app.html || "", data.regime),
               ])
+            : []),
+
+          // Preserve uncertain source content in the draft so it cannot disappear silently.
+          ...((data.unclassified && Array.isArray(data.unclassified) && data.unclassified.length > 0)
+            ? [
+                new Paragraph({ children: [new PageBreak()] }),
+                new Paragraph({
+                  children: [new TextRun({ text: "KHỐI CHƯA PHÂN LOẠI — CẦN ĐỐI CHIẾU BẢN GỐC", bold: true, font: "Times New Roman", size: profile.bodyFontSize * 2 })],
+                }),
+                ...(data.unclassified as SourceBlock[]).flatMap((block) => {
+                  const fallback = `<p>${(block.text || "[Khối không có văn bản]").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`;
+                  return [
+                    new Paragraph({ text: `Khối #${block.index + 1} (${block.kind})` }),
+                    ...convertHtmlToDocxElements(block.html || fallback, data.regime),
+                  ];
+                }),
+              ]
             : []),
         ],
       },
