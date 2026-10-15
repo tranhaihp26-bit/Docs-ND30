@@ -22,7 +22,7 @@ const doc = applyCompanyProfile({
   nationalHeader2: 'Độc lập - Tự do - Hạnh phúc' as const,
   orgHeader1:'[UNVERIFIED]',orgHeader2:'[UNVERIFIED]',
   referenceNumber:'Số: …/BB-HTMB', locationAndDate:'Hải Phòng, ngày … tháng … năm …',
-  documentType:'BIÊN BẢN',subject:'Làm việc về công tác tổ chức',
+  documentType:'QUYẾT ĐỊNH',subject:'Làm việc về công tác tổ chức',
   bodyHtml:'<p>Nội dung tổng hợp phục vụ phép thử.</p>',
   signTitle:'GIÁM ĐỐC',signName:'[Họ tên]',recipients:'Lưu: VT.',
 });

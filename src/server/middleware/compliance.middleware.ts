@@ -137,13 +137,16 @@ export function enforceND30Standards(
 
   // 4. RULE OVERRIDE: Loại văn bản chuẩn hóa
   const documentType = (source.documentType || (isParty ? "NGHỊ QUYẾT" : "CÔNG VĂN")).toString().trim().toUpperCase();
+  const isMinutes = /^BIÊN\s+BẢN\b/i.test(documentType);
 
   // 5. RULE REPAIR: Số và ký hiệu văn bản (Không tự bịa số giả)
   const referenceNumber = normalizeReferenceNumber(source.referenceNumber, documentType);
 
   // 6. RULE REPAIR: Địa danh và Ngày tháng năm (Không tự bịa ngày nếu không có)
   let locationAndDate = (source.locationAndDate || "").toString().trim();
-  if (!locationAndDate || locationAndDate === "[Địa danh], ngày ... tháng ... năm ...") {
+  if (isMinutes && !locationAndDate) {
+    locationAndDate = "";
+  } else if (!locationAndDate || locationAndDate === "[Địa danh], ngày ... tháng ... năm ...") {
     locationAndDate = "[Địa danh], ngày ... tháng ... năm ...";
   } else if (!LOCATION_AND_DATE_REGEX.test(locationAndDate)) {
     const loc = extractLocation(locationAndDate);
@@ -189,9 +192,11 @@ export function enforceND30Standards(
     documentType,
     referenceNumber,
     subject,
+    addressee: (source.addressee || "").toString().trim(),
     bodyHtml,
     signTitle,
     signName,
+    signatureBlocks: Array.isArray(source.signatureBlocks) ? source.signatureBlocks : [],
     recipients,
     appendices: Array.isArray(source.appendices) ? source.appendices : [],
     unclassified: Array.isArray(source.unclassified) ? source.unclassified : [],

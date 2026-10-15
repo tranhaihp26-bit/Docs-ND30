@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { detectEmbeddedSignature, generateND30DocxDocument } from "../utils/docxExport";
 import { preparePreviewDocument, type PreviewDocumentSource } from "../utils/previewDocument.ts";
+import { hasAdministrativeHeaderIssueDate } from "../utils/documentStructure.ts";
 import {
   COMPANY_HEADER_PROFILE_ID, COMPANY_HEADER_GEOMETRY_MM, COMPANY_MOTTO,
   COMPANY_NATIONAL_HEADER, COMPANY_HEADER_PARENT_LINES, COMPANY_HEADER_ISSUER_LINES,
@@ -53,6 +54,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
 }) => {
   const isParty = standardType === "party";
   const isCompanyHeader = !isParty && doc.headerProfile === COMPANY_HEADER_PROFILE_ID;
+  const hasHeaderIssueDate = hasAdministrativeHeaderIssueDate(doc.documentType || "");
   const isImported = doc.importMetadata?.sourceType === "docx" || doc.importMetadata?.sourceType === "txt";
   const [zoomLevel, setZoomLevel] = useState<number | "auto">("auto");
   const [computedScale, setComputedScale] = useState<number>(mode === "thumbnail" ? 0.48 : 0.85);
@@ -80,6 +82,8 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
     topHtmlUpper.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") ||
     topHtmlUpper.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
   const hasEmbeddedSignature = detectEmbeddedSignature(bodyHtml, doc.documentType);
+  const hasStructuredSignatures = Boolean(doc.signatureBlocks?.length) && !hasEmbeddedSignature;
+  const hasEmbeddedAddressee = /Kính gửi\s*:/i.test(bodyHtml);
 
   // 1. Calculate responsive scale based on container width
   useEffect(() => {
@@ -259,7 +263,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
             <div className="border-b border-black mx-auto mt-1" style={{ width: "50.5mm" }} />
           </div>
           <p className="mt-1" style={{ fontSize: "13pt" }}>{doc.referenceNumber || "Số: …/…"}</p>
-          <p className="mt-1 italic text-right" style={{ fontSize: "13pt" }}>{doc.locationAndDate || "Hải Phòng, ngày … tháng … năm …"}</p>
+          {hasHeaderIssueDate && <p className="mt-1 italic text-right" style={{ fontSize: "13pt" }}>{doc.locationAndDate || "Hải Phòng, ngày … tháng … năm …"}</p>}
         </div>
       )}
       {!hasEmbeddedHeader && !isCompanyHeader && (
@@ -295,9 +299,9 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
               </>
             )}
             {isParty && <div className="w-28 h-[1px] bg-black mx-auto my-1.5"></div>}
-            <p className="text-[10pt] italic mt-1 font-normal">
+            {hasHeaderIssueDate && <p className="text-[10pt] italic mt-1 font-normal">
               {doc.locationAndDate || "[Địa danh], ngày ... tháng ... năm ..."}
-            </p>
+            </p>}
           </div>
         </div>
       )}
@@ -320,6 +324,12 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
         </div>
       )}
 
+      {!hasEmbeddedAddressee && doc.addressee && (
+        <div className="my-3 text-left whitespace-pre-line text-[11pt]">
+          <strong>Kính gửi:</strong> {doc.addressee}
+        </div>
+      )}
+
       {/* 4. Main Body HTML */}
       <div
         className="text-justify my-4 space-y-2 [&_p]:my-1.5 [&_p]:text-justify [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-black [&_th]:p-2 [&_th]:font-bold [&_th]:bg-slate-50 [&_td]:border [&_td]:border-black [&_td]:p-2"
@@ -334,29 +344,35 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
       />
 
       {/* 5. Signature & Recipients Block */}
-      {!hasEmbeddedSignature && (!isImported || Boolean(doc.recipients || doc.signTitle || doc.signName)) && (
-        <div className="mt-8 grid grid-cols-2 gap-4 pt-2 items-start break-inside-avoid">
-          {/* Left Column: Recipients */}
-          <div className="text-[10pt] leading-normal">
-            {(doc.recipients || !isImported) && <>
-              <p className="font-bold italic">Nơi nhận:</p>
-              <div className="whitespace-pre-line mt-1">
-                {doc.recipients || "- Như trên;\n- Lưu: VT."}
-              </div>
-            </>}
-          </div>
+      {!hasEmbeddedSignature && (!isImported || Boolean(doc.recipients || doc.signTitle || doc.signName || doc.signatureBlocks?.length)) && (
+        <div className="mt-8 space-y-5 pt-2 break-inside-avoid">
+          {(doc.recipients || !isImported) && <div className="max-w-[48%] text-[10pt] leading-normal">
+            <p className="font-bold italic">Nơi nhận:</p>
+            <div className="whitespace-pre-line mt-1">{doc.recipients || "- Như trên;\n- Lưu: VT."}</div>
+          </div>}
 
-          {/* Right Column: Sign Title & Name */}
-          <div className="text-center">
-            {(doc.signTitle || doc.signName || !isImported) && <>
-              <p className="font-bold uppercase text-[11pt] whitespace-pre-line leading-tight">
-                {doc.signTitle || (isImported ? "" : isParty ? "T/M CẤP ỦY\nBÍ THƯ" : "TM. CƠ QUAN BAN HÀNH\nGIÁM ĐỐC")}
-              </p>
-              <p className="text-[9.5pt] italic my-2 text-slate-600">(Ký, ghi rõ họ tên và đóng dấu)</p>
-              <div className="h-16"></div>
-              <p className="font-bold text-[11pt]">{doc.signName || (isImported ? "" : "[Họ và tên]")}</p>
-            </>}
-          </div>
+          {hasStructuredSignatures ? (
+            <div className="grid grid-cols-2 gap-4 items-start">
+              {doc.signatureBlocks!.map(block => <div key={block.id} className="text-center">
+                <p className="font-bold uppercase text-[11pt] whitespace-pre-line leading-tight">{block.role}</p>
+                <p className="text-[9.5pt] italic my-2 text-slate-600">{block.instruction || "(Ký, ghi rõ họ tên)"}</p>
+                <div className="h-16"></div>
+                <p className="font-bold text-[11pt]">{block.name}</p>
+              </div>)}
+            </div>
+          ) : <div className="grid grid-cols-2 gap-4 items-start">
+            <div />
+            <div className="text-center">
+              {(doc.signTitle || doc.signName || !isImported) && <>
+                <p className="font-bold uppercase text-[11pt] whitespace-pre-line leading-tight">
+                  {doc.signTitle || (isImported ? "" : isParty ? "T/M CẤP ỦY\nBÍ THƯ" : "TM. CƠ QUAN BAN HÀNH\nGIÁM ĐỐC")}
+                </p>
+                <p className="text-[9.5pt] italic my-2 text-slate-600">(Ký, ghi rõ họ tên và đóng dấu)</p>
+                <div className="h-16"></div>
+                <p className="font-bold text-[11pt]">{doc.signName || (isImported ? "" : "[Họ và tên]")}</p>
+              </>}
+            </div>
+          </div>}
         </div>
       )}
 

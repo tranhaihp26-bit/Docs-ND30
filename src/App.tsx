@@ -30,6 +30,7 @@ import { formatStandardDate, extractLocation } from "./server/middleware/complia
 import { detectDocumentType } from "./server/parser.ts";
 import { COMPANY_HEADER_PROFILE_ID, COMPANY_HEADER_PARENT_LINES, applyCompanyProfile, matchesCompanyHeader, LOCKED_COMPANY_FIELDS } from "./canonical/nd30/companyHeader.ts";
 import { MINUTES_TEMPLATE, type TemplatePreset } from "./utils/minutesTemplate.ts";
+import { ADMINISTRATIVE_DOCUMENT_TYPES, getAdministrativeDocumentStructure, hasAdministrativeHeaderIssueDate, separateEmbeddedSignatureTables, type DocumentSignatureBlock } from "./utils/documentStructure.ts";
 
 export interface DocumentState {
   headerProfile?: "generic" | typeof COMPANY_HEADER_PROFILE_ID;
@@ -41,9 +42,11 @@ export interface DocumentState {
   documentType: string;
   referenceNumber: string;
   subject: string;
+  addressee?: string;
   bodyHtml: string;
   signTitle: string;
   signName: string;
+  signatureBlocks?: DocumentSignatureBlock[];
   recipients: string;
   appendices?: AppendixDocument[];
   unclassified?: SourceBlock[];
@@ -73,6 +76,10 @@ interface Version {
 
 function documentFromImport(source: StructuredImport, standardType: "state" | "party", filename: string, fileType: "docx" | "txt", approved = false): DocumentState {
   const fields = source.fields;
+  const documentType = fields.documentType?.value || "";
+  const signatures = source.signatureBlocks?.length
+    ? source.signatureBlocks
+    : separateEmbeddedSignatureTables(source.signatureHtml || "", documentType).signatureBlocks;
   const imported: DocumentState = {
     headerProfile: "generic",
     orgHeader1: fields.orgHeader1?.value || "",
@@ -80,12 +87,14 @@ function documentFromImport(source: StructuredImport, standardType: "state" | "p
     nationalHeader1: fields.nationalHeader1?.value || "",
     nationalHeader2: fields.nationalHeader2?.value || "",
     locationAndDate: fields.locationAndDate?.value || "",
-    documentType: fields.documentType?.value || "",
+    documentType,
     referenceNumber: fields.referenceNumber?.value || "",
     subject: fields.subject?.value || "",
+    addressee: fields.addressee?.value || "",
     bodyHtml: composeImportedBodyHtml(source),
     signTitle: fields.signTitle?.value || "",
     signName: fields.signName?.value || "",
+    signatureBlocks: signatures,
     recipients: fields.recipients?.value || "",
     appendices: source.appendices || [],
     unclassified: source.unclassified || [],
@@ -93,6 +102,18 @@ function documentFromImport(source: StructuredImport, standardType: "state" | "p
   };
   return standardType === "state" && matchesCompanyHeader(imported.orgHeader1, imported.orgHeader2)
     ? applyCompanyProfile(imported) : imported;
+}
+
+function migrateLegacyDocument(data: DocumentState): DocumentState {
+  const separated = separateEmbeddedSignatureTables(data.bodyHtml || "", data.documentType || "");
+  if (!separated.signatureBlocks.length) return data;
+  return {
+    ...data,
+    bodyHtml: separated.bodyHtml,
+    signatureBlocks: data.signatureBlocks?.length ? data.signatureBlocks : separated.signatureBlocks,
+    signTitle: data.signatureBlocks?.length ? data.signTitle : "",
+    signName: data.signatureBlocks?.length ? data.signName : "",
+  };
 }
 
 const TEMPLATES: TemplatePreset[] = [
@@ -140,8 +161,8 @@ const TEMPLATES: TemplatePreset[] = [
       documentType: "CÔNG VĂN",
       referenceNumber: "Số: .../[TÊN CƠ QUAN]",
       subject: "V/v [Trích yếu nội dung công văn]",
+      addressee: "[Tên cơ quan, tổ chức hoặc cá nhân nhận công văn]",
       bodyHtml: `
-        <p style="text-align: center;"><strong>Kính gửi:</strong> [Tên cơ quan, tổ chức hoặc cá nhân nhận công văn]</p>
         <p>Thực hiện [Tên văn bản/nhiệm vụ được giao], [Tên cơ quan ban hành] đề nghị quý cơ quan, đơn vị phối hợp triển khai các nội dung sau:</p>
         <p>1. Tổ chức rà soát, kiểm tra các nội dung chuyên môn thuộc phạm vi quản lý.</p>
         <p>2. Lập danh mục các công việc cần triển khai và phân công đơn vị đầu mối thực hiện.</p>
@@ -168,8 +189,8 @@ const TEMPLATES: TemplatePreset[] = [
       documentType: "BÁO CÁO",
       referenceNumber: "Số: .../BC-[TÊN CƠ QUAN]",
       subject: "Báo cáo [Nội dung tình hình thực hiện nhiệm vụ...]",
+      addressee: "[Tên cơ quan cấp trên/cơ quan nhận báo cáo]",
       bodyHtml: `
-        <p style="text-align: center;"><strong>Kính gửi:</strong> [Tên cơ quan cấp trên/cơ quan nhận báo cáo]</p>
         <p>Thực hiện kế hoạch công tác năm [Năm], [Tên cơ quan ban hành] báo cáo kết quả triển khai như sau:</p>
         <p><strong>I. TÌNH HÌNH TRIỂN KHAI VÀ KẾT QUẢ ĐẠT ĐƯỢC</strong></p>
         <p>1. Công tác chỉ đạo, điều hành: Đã tham mưu ban hành đầy đủ các văn bản hướng dẫn và tổ chức triển khai đúng tiến độ.</p>
@@ -228,8 +249,8 @@ const TEMPLATES: TemplatePreset[] = [
       documentType: "TỜ TRÌNH",
       referenceNumber: "Số: .../TTr-[TÊN CƠ QUAN]",
       subject: "V/v phê duyệt [Nội dung chủ trương/đề án/dự toán...]",
+      addressee: "[Tên cơ quan/Cấp có thẩm quyền phê duyệt]",
       bodyHtml: `
-        <p style="text-align: center;"><strong>Kính gửi:</strong> [Tên cơ quan/Cấp có thẩm quyền phê duyệt]</p>
         <p><strong><em>Căn cứ [Tên căn cứ pháp lý quy định thẩm quyền phê duyệt];</em></strong></p>
         <p><strong><em>Căn cứ [Tên văn bản/quy định chuyên ngành liên quan];</em></strong></p>
         <p>[Tên cơ quan ban hành] kính trình [Tên cấp có thẩm quyền] xem xét, phê duyệt [Nội dung chủ trương/đề án] với các nội dung chi tiết kèm theo.</p>
@@ -364,7 +385,7 @@ const TEMPLATES: TemplatePreset[] = [
       referenceNumber: "Số: .../...",
       subject: "V/v [Trích yếu nội dung văn bản]",
       bodyHtml: `
-        <p>Soạn thảo nội dung văn bản hành chính chi tiết tại đây. Bạn có thể sử dụng các nút công cụ phía trên để chèn Căn cứ pháp lý, Điều khoản, Bảng biểu và Khối chữ ký chuẩn Nghị định 30/2020/NĐ-CP.</p>
+        <p>Soạn thảo nội dung văn bản chính tại đây. Thông tin phần đầu, người nhận, chữ ký, nơi nhận và phụ lục được nhập ở các khối riêng.</p>
       `,
       signTitle: "TM. [CƠ QUAN BAN HÀNH]\n[CHỨC VỤ]",
       signName: "[Họ và tên người ký]",
@@ -470,7 +491,7 @@ export default function App() {
       if (!active) return;
       if (saved) {
         skipLoadedDraftSaveRef.current = true;
-        setDoc(saved.doc);
+        setDoc(migrateLegacyDocument(saved.doc));
         setStandardType(saved.standardType);
         setVersions(saved.versions);
         setStructuredImport(saved.structuredImport);
@@ -591,6 +612,14 @@ export default function App() {
 
   const changeAppendices = (change: (current: AppendixDocument[]) => AppendixDocument[]) => {
     setDoc(prev => ({ ...prev, appendices: change(prev.appendices || []),
+      importMetadata: prev.importMetadata?.sourceType === "docx" || prev.importMetadata?.sourceType === "txt"
+        ? { ...prev.importMetadata, status: "needs_review" } : prev.importMetadata,
+    }));
+    if (structuredImport) setImportReviewAccepted(false);
+  };
+
+  const changeSignatureBlocks = (change: (current: DocumentSignatureBlock[]) => DocumentSignatureBlock[]) => {
+    setDoc(prev => ({ ...prev, signatureBlocks: change(prev.signatureBlocks || []),
       importMetadata: prev.importMetadata?.sourceType === "docx" || prev.importMetadata?.sourceType === "txt"
         ? { ...prev.importMetadata, status: "needs_review" } : prev.importMetadata,
     }));
@@ -733,7 +762,7 @@ export default function App() {
       return;
     }
     const confirmed = window.confirm(
-      "AI sẽ nhận toàn bộ nội dung trong các trường đã parse, nội dung đang soạn, bảng ký, phần cuối, phụ lục và khối chưa phân loại để đánh giá. Dữ liệu được gửi tới Google Gemini qua máy chủ đã cấu hình; tài liệu có thể chứa dữ liệu cá nhân. Báo cáo chỉ đưa ra nhận xét và không tự sửa bản soạn. Bạn có muốn gửi dữ liệu để rà soát không?",
+      "AI sẽ nhận toàn bộ nội dung trong các trường đã parse, nội dung đang soạn, từng khối người ký, phần cuối, phụ lục và khối chưa phân loại để đánh giá. Dữ liệu được gửi tới Google Gemini qua máy chủ đã cấu hình; tài liệu có thể chứa dữ liệu cá nhân. Báo cáo chỉ đưa ra nhận xét và không tự sửa bản soạn. Bạn có muốn gửi dữ liệu để rà soát không?",
     );
     if (!confirmed) return;
     const requestedRevision = auditRevisionRef.current;
@@ -758,8 +787,9 @@ export default function App() {
             orgHeader1: doc.orgHeader1, orgHeader2: doc.orgHeader2,
             nationalHeader1: doc.nationalHeader1, nationalHeader2: doc.nationalHeader2,
             referenceNumber: doc.referenceNumber, locationAndDate: doc.locationAndDate,
-            documentType: doc.documentType, subject: doc.subject, bodyHtml: doc.bodyHtml,
+            documentType: doc.documentType, subject: doc.subject, addressee: doc.addressee || "", bodyHtml: doc.bodyHtml,
             signTitle: doc.signTitle, signName: doc.signName, recipients: doc.recipients,
+            signatureBlocks: doc.signatureBlocks || [],
             appendices: (doc.appendices || []).map(({ id, title, referenceText, html }) => ({ id, title, referenceText, html })),
           },
         }),
@@ -964,9 +994,11 @@ export default function App() {
         documentType: exportDoc.documentType,
         referenceNumber: exportDoc.referenceNumber,
         subject: exportDoc.subject,
+        addressee: exportDoc.addressee || "",
         bodyHtml: exportDoc.bodyHtml,
         signTitle: exportDoc.signTitle,
         signName: exportDoc.signName,
+        signatureBlocks: exportDoc.signatureBlocks || [],
         recipients: exportDoc.recipients,
         appendices: exportDoc.appendices || [],
         unclassified: exportDoc.unclassified || [],
@@ -1049,7 +1081,7 @@ export default function App() {
     if (JSON.stringify(doc) !== JSON.stringify(v.data)) {
       pushVersion(`Trước khi khôi phục: ${v.title}`, doc);
     }
-    setDoc(v.data);
+    setDoc(migrateLegacyDocument(v.data));
     setStandardType(v.standardType);
     setRawText(v.sourceContext?.rawText || "");
     setUploadedHtml(v.sourceContext?.uploadedHtml || "");
@@ -1082,6 +1114,7 @@ export default function App() {
   };
 
   const hasEmbeddedMultiSignature = detectEmbeddedSignature(doc.bodyHtml, doc.documentType);
+  const isMinutesDocument = !hasAdministrativeHeaderIssueDate(doc.documentType);
   const pendingImportChecks = structuredImport
     ? buildImportReview(sourceSnapshot || structuredImport, standardType === "party" ? "party" : "administrative")
       .filter(check => check.status === "NEEDS_REVIEW")
@@ -1320,7 +1353,7 @@ export default function App() {
                             ["orgHeader1", "Cơ quan cấp trên"], ["orgHeader2", "Cơ quan ban hành"],
                             ["nationalHeader1", "Quốc hiệu / Đảng hiệu"], ["nationalHeader2", "Tiêu ngữ"],
                             ["locationAndDate", "Địa danh, ngày tháng"], ["documentType", "Loại văn bản"],
-                            ["referenceNumber", "Số, ký hiệu"], ["subject", "Trích yếu"],
+                            ["referenceNumber", "Số, ký hiệu"], ["subject", "Trích yếu"], ["addressee", "Kính gửi / Đối tượng nhận"],
                             ["signTitle", "Chức vụ người ký"], ["signName", "Họ tên người ký"],
                             ["recipients", "Nơi nhận"],
                           ] as const).map(([key, label]) => {
@@ -1329,22 +1362,25 @@ export default function App() {
                             const currentValue = key === "orgHeader1" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID
                               ? COMPANY_HEADER_PARENT_LINES.join("\n") : doc[key];
                             const lockedCompanyField = doc.headerProfile === COMPANY_HEADER_PROFILE_ID && LOCKED_COMPANY_FIELDS.has(key);
-                            const multiSignerField = Boolean((key === "signTitle" || key === "signName") && (sourceSnapshot || structuredImport).signatureHtml);
-                            const optionalRecipients = key === "recipients" && /^BIÊN BẢN\b/i.test((sourceSnapshot || structuredImport).fields.documentType?.value || "");
-                            const needsAttention = !multiSignerField && !optionalRecipients &&
+                            const multiSignerField = Boolean((key === "signTitle" || key === "signName") && ((sourceSnapshot || structuredImport).signatureHtml || (sourceSnapshot || structuredImport).signatureBlocks?.length));
+                            const importedType = (sourceSnapshot || structuredImport).fields.documentType?.value || "";
+                            const optionalRecipients = key === "recipients" && /^BIÊN BẢN\b/i.test(importedType);
+                            const optionalAddressee = key === "addressee" && !/^(?:CÔNG VĂN|BÁO CÁO|TỜ TRÌNH)\b/i.test(importedType);
+                            const optionalIssueDate = key === "locationAndDate" && !hasAdministrativeHeaderIssueDate(importedType);
+                            const needsAttention = !multiSignerField && !optionalRecipients && !optionalAddressee && !optionalIssueDate &&
                               (field?.status === "missing" || field?.status === "ambiguous" || isPlaceholderValue(field?.value || ""));
                             return (
                               <div key={key} className="block text-slate-700 rounded border border-slate-200 p-2">
                                 <span className="font-medium">{label}</span>
                                 <span className={`ml-2 text-[10px] ${needsAttention ? "text-amber-700" : "text-emerald-700"}`}>
-                                  {multiSignerField ? "Trong bảng ký nhiều người" : optionalRecipients && !field?.value ? "Không có trong biên bản nguồn" : needsAttention ? "Cần đối chiếu/điền" : field?.status === "user_confirmed" ? "Đã sửa" : `Trích xuất (${field?.confidence || "?"})`}
+                                  {multiSignerField ? "Trong bảng ký nhiều người" : optionalRecipients && !field?.value ? "Không có trong biên bản nguồn" : (optionalAddressee || optionalIssueDate) && !field?.value ? "Không áp dụng cho loại này" : needsAttention ? "Cần đối chiếu/điền" : field?.status === "user_confirmed" ? "Đã sửa" : `Trích xuất (${field?.confidence || "?"})`}
                                 </span>
                                 <p className="mt-1 whitespace-pre-wrap break-words"><b>Nguồn:</b> {originalField?.value || "[Không tìm thấy]"}</p>
                                 {!multiSignerField && currentValue !== originalField?.value && <p className="mt-1 whitespace-pre-wrap break-words text-blue-800"><b>Đang soạn:</b> {String(currentValue || "[Trống]")}</p>}
                                 <button type="button" className="mt-2 text-blue-700 font-semibold underline" onClick={() => {
                                   setReviewOpen(false);
-                                  document.getElementById(multiSignerField ? "field-bodyHtml" : `field-${key}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-                                }}>{multiSignerField ? "Tới bảng ký để sửa" : lockedCompanyField ? "Xem trường theo profile" : "Tới trường để sửa"}</button>
+                                  document.getElementById(multiSignerField ? "field-signatureBlocks" : `field-${key}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                                }}>{multiSignerField ? "Tới khối người ký" : lockedCompanyField ? "Xem trường theo profile" : "Tới trường để sửa"}</button>
                               </div>
                             );
                           })}
@@ -1352,7 +1388,7 @@ export default function App() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           {Object.entries(structuredImport.fields).filter(([key]) => ![
                             "orgHeader1", "orgHeader2", "nationalHeader1", "nationalHeader2", "locationAndDate",
-                            "documentType", "referenceNumber", "subject", "signTitle", "signName", "recipients",
+                            "documentType", "referenceNumber", "subject", "addressee", "signTitle", "signName", "recipients",
                           ].includes(key)).map(([key, field]) => (
                             <div id={`source-field-${key}`} key={key} className="rounded border border-slate-200 p-2 text-slate-700">
                               <strong>{key}</strong>
@@ -1363,7 +1399,7 @@ export default function App() {
                         </div>
                         <div className="border-t border-slate-200 pt-2 space-y-1 text-slate-700">
                           <p><strong>Nội dung chính:</strong> {structuredImport.body.sourceBlockIds.length} khối</p>
-                          {structuredImport.signatureHtml && <p><strong>Bảng ký nhiều người:</strong> Đã giữ nguyên bảng từ tệp gốc để đưa vào trình soạn thảo và bản xuất.</p>}
+                          {structuredImport.signatureHtml && <p><strong>Khối ký nhiều người:</strong> Đã tách {structuredImport.signatureBlocks?.length || 0} người ký khỏi body; chỉnh từng vai trò và họ tên ở các ô riêng bên dưới.</p>}
                           <details className="bg-slate-50 rounded p-2">
                             <summary className="cursor-pointer font-medium">Phần đầu, thông tin và dấu phân cách trong tệp gốc</summary>
                             {(structuredImport.blocks || []).filter(block => block.role === "header" || block.role === "metadata" || block.role === "separator").map(block => (
@@ -1576,6 +1612,13 @@ export default function App() {
               </div>}
 
               {standardType === "state" && (
+                <div className="pt-1">
+                  <h3 className="text-xs font-bold text-slate-900">Các khối thể thức ngoài nội dung chính</h3>
+                  <p className="mt-0.5 text-[11px] text-slate-500">Mỗi thành phần được nhập riêng; phần body bên dưới chỉ chứa nội dung văn bản.</p>
+                </div>
+              )}
+
+              {standardType === "state" && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3">
                   <label htmlFor="company-header-profile" className="block text-[11px] font-semibold text-slate-800 mb-1">
                     Profile phần đầu văn bản
@@ -1597,7 +1640,7 @@ export default function App() {
 
               {/* Thể thức cơ quan ban hành */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
+                <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     Cơ quan chủ quản cấp trên (nếu có):
                   </label>
@@ -1611,7 +1654,7 @@ export default function App() {
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 resize-y"
                   />
                 </div>
-                <div>
+                <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     Tên cơ quan, tổ chức ban hành (*):
                   </label>
@@ -1629,7 +1672,7 @@ export default function App() {
 
               {/* Quốc hiệu và Tiêu ngữ */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
+                <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Quốc hiệu (Dòng 1):</label>
                   <input
                     id="field-nationalHeader1"
@@ -1640,7 +1683,7 @@ export default function App() {
                     className="w-full bg-slate-100 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-bold"
                   />
                 </div>
-                <div>
+                <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Tiêu ngữ (Dòng 2):</label>
                   <input
                     id="field-nationalHeader2"
@@ -1655,8 +1698,8 @@ export default function App() {
               </div>
 
               {/* Địa danh ngày tháng & Số ký hiệu & Loại văn bản */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
+              <div className={`grid grid-cols-1 ${isMinutesDocument ? "md:grid-cols-2" : "md:grid-cols-3"} gap-3`}>
+                <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Số và ký hiệu văn bản:</label>
                   <input
                     id="field-referenceNumber"
@@ -1667,7 +1710,7 @@ export default function App() {
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
                   />
                 </div>
-                <div>
+                {!isMinutesDocument && <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-[11px] font-semibold text-slate-700">Địa danh và ngày ban hành:</label>
                     <button
@@ -1690,22 +1733,27 @@ export default function App() {
                     placeholder="VD: [Địa danh], ngày 14 tháng 10 năm 2026"
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 italic"
                   />
-                </div>
-                <div>
+                </div>}
+                <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Tên loại văn bản:</label>
                   <input
                     id="field-documentType"
                     type="text"
+                    list="administrative-document-type-options"
                     value={doc.documentType}
                     onChange={(e) => handleFieldChange("documentType", e.target.value.toUpperCase())}
                     placeholder="VD: QUYẾT ĐỊNH, CÔNG VĂN, BÁO CÁO..."
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-bold text-center"
                   />
+                  <datalist id="administrative-document-type-options">
+                    {ADMINISTRATIVE_DOCUMENT_TYPES.map(type => <option key={type.name} value={type.name.toLocaleUpperCase("vi-VN")} />)}
+                  </datalist>
                 </div>
               </div>
+              {isMinutesDocument && <p className="text-[10px] text-slate-500">Mẫu 1.9 ghi thời gian và địa điểm trong phần nội dung; phần đầu không có dòng địa danh, ngày ban hành.</p>}
 
               {/* Trích yếu */}
-              <div>
+              <div className="rounded-lg border border-slate-200 bg-white p-2">
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">Trích yếu nội dung văn bản:</label>
                 <input
                   id="field-subject"
@@ -1717,11 +1765,18 @@ export default function App() {
                 />
               </div>
 
+              <div className="rounded-lg border border-slate-200 bg-white p-2">
+                <label htmlFor="field-addressee" className="block text-[11px] font-semibold text-slate-700 mb-1">Kính gửi / Đối tượng nhận · khối riêng (nếu có)</label>
+                <textarea id="field-addressee" rows={2} value={doc.addressee || ""} onChange={(e) => handleFieldChange("addressee", e.target.value)}
+                  placeholder="Tên cơ quan, tổ chức hoặc cá nhân nhận công văn/báo cáo/tờ trình"
+                  className="w-full resize-y rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs text-slate-800" />
+              </div>
+
               {/* ND30 Tiptap Editor */}
               <div id="field-bodyHtml">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-[11px] font-semibold text-slate-700">
-                    Nội dung chi tiết (Trình soạn thảo {standardType === "party" ? "HD 05" : "NĐ 30"}):
+                    Nội dung chính · Body (Trình soạn thảo {standardType === "party" ? "HD 05" : "NĐ 30"}):
                   </label>
                   <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px]">
                     <button
@@ -1745,6 +1800,22 @@ export default function App() {
                   </div>
                 </div>
 
+                {standardType === "state" && getAdministrativeDocumentStructure(doc.documentType) && (
+                  <div className="mb-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2.5" data-testid="body-outline-guidance">
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                      <p className="text-[11px] font-bold text-indigo-950">Khung nội dung gợi ý · {getAdministrativeDocumentStructure(doc.documentType)?.name}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!getAdministrativeDocumentStructure(doc.documentType)?.sampleFormAvailable && <span className="text-[10px] font-medium text-amber-800">Không có mẫu riêng ở Phụ lục III</span>}
+                        <span className="text-[10px] font-medium text-indigo-700">Gợi ý biên tập, có thể điều chỉnh</span>
+                      </div>
+                    </div>
+                    <ol className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-[10px] text-indigo-900 sm:grid-cols-2">
+                      {getAdministrativeDocumentStructure(doc.documentType)?.bodyOutline.map((item, index) => <li key={`${index}-${item}`}>{index + 1}. {item}</li>)}
+                    </ol>
+                    <p className="mt-1 text-[10px] text-indigo-700">Nghị định 30 cho phép lựa chọn bố cục theo tên loại và nội dung; khung này không phải dàn ý bắt buộc.</p>
+                  </div>
+                )}
+
                 {editorMode === "rich" ? (
                   <ND30Editor
                     key={standardType}
@@ -1764,46 +1835,61 @@ export default function App() {
                 )}
               </div>
 
-              {/* Chức vụ, Họ tên người ký, Nơi nhận */}
-              {hasEmbeddedMultiSignature && <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-                Khối chữ ký đã nằm trong nội dung chính. Sửa tên và chức danh ngay trong bảng; nơi nhận được chỉnh ở ô riêng bên dưới.
-              </p>}
-              <div className={`grid grid-cols-1 ${hasEmbeddedMultiSignature ? "" : "md:grid-cols-3"} gap-3`}>
-                {!hasEmbeddedMultiSignature && <>
+              {/* Chữ ký và Nơi nhận là các khối độc lập, nằm ngoài body */}
+              <section id="field-signatureBlocks" className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Chức vụ người ký:</label>
-                    <textarea
-                      id="field-signTitle"
-                      rows={2}
-                      value={doc.signTitle}
-                      onChange={(e) => handleFieldChange("signTitle", e.target.value)}
-                      placeholder="VD: TM. ỦY BAN NHÂN DÂN&#10;CHỦ TỊCH"
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-semibold"
-                    />
+                    <h3 className="text-xs font-bold text-slate-900">Khối người ký</h3>
+                    <p className="text-[10px] text-slate-500">Mỗi người ký có ô chức vụ, hướng dẫn ký và họ tên riêng.</p>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Họ tên người ký:</label>
-                    <input
-                      id="field-signName"
-                      type="text"
-                      value={doc.signName}
-                      onChange={(e) => handleFieldChange("signName", e.target.value)}
-                      placeholder="Ghi rõ họ và tên người ký"
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-bold"
-                    />
-                  </div>
-                </>}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Nơi nhận:</label>
-                  <textarea
-                    id="field-recipients"
-                    rows={2}
-                    value={doc.recipients}
-                    onChange={(e) => handleFieldChange("recipients", e.target.value)}
-                    placeholder="VD: Như Điều 3;&#10;Lưu: VT, TH."
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                  />
+                  <button type="button" onClick={() => changeSignatureBlocks(current => [...current, {
+                    id: `signer-${Date.now()}`, role: "[CHỨC VỤ NGƯỜI KÝ]", instruction: "(Ký, ghi rõ họ tên)", name: "[Họ và tên]", status: "needs_review",
+                  }])} className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50">
+                    + Thêm người ký
+                  </button>
                 </div>
+
+                {hasEmbeddedMultiSignature && !doc.signatureBlocks?.length && <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                  Phát hiện bảng ký cũ còn trong body. <button type="button" className="font-bold underline" onClick={() => {
+                    const separated = separateEmbeddedSignatureTables(doc.bodyHtml, doc.documentType);
+                    if (!separated.signatureBlocks.length) return;
+                    setDoc(prev => ({ ...prev, bodyHtml: separated.bodyHtml, signatureBlocks: separated.signatureBlocks, signTitle: "", signName: "" }));
+                  }}>Tách bảng thành các ô người ký</button>
+                </div>}
+
+                {doc.signatureBlocks?.length ? (
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {doc.signatureBlocks.map((signer, index) => <div key={signer.id} className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">Người ký {index + 1}</span>
+                        <button type="button" aria-label={`Xóa người ký ${index + 1}`} onClick={() => changeSignatureBlocks(current => current.filter(item => item.id !== signer.id))} className="text-[10px] text-rose-600 hover:underline">Xóa</button>
+                      </div>
+                      <label className="block text-[10px] font-semibold text-slate-700">Chức vụ / vai trò
+                        <textarea aria-label={`Chức vụ người ký ${index + 1}`} rows={2} value={signer.role} onChange={e => changeSignatureBlocks(current => current.map((item, i) => i === index ? { ...item, role: e.target.value, status: "user_confirmed" } : item))} className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-slate-50 p-2 text-xs font-semibold text-slate-800" />
+                      </label>
+                      <label className="block text-[10px] font-semibold text-slate-700">Hướng dẫn ký
+                        <input aria-label={`Hướng dẫn ký ${index + 1}`} value={signer.instruction} onChange={e => changeSignatureBlocks(current => current.map((item, i) => i === index ? { ...item, instruction: e.target.value, status: "user_confirmed" } : item))} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 p-2 text-xs text-slate-800" />
+                      </label>
+                      <label className="block text-[10px] font-semibold text-slate-700">Họ tên
+                        <input aria-label={`Họ tên người ký ${index + 1}`} value={signer.name} onChange={e => changeSignatureBlocks(current => current.map((item, i) => i === index ? { ...item, name: e.target.value, status: "user_confirmed" } : item))} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 p-2 text-xs font-bold text-slate-800" />
+                      </label>
+                    </div>)}
+                  </div>
+                ) : !hasEmbeddedMultiSignature && <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div className="rounded-lg border border-slate-200 bg-white p-2">
+                    <label htmlFor="field-signTitle" className="block text-[10px] font-semibold text-slate-700">Chức vụ / thẩm quyền người ký</label>
+                    <textarea id="field-signTitle" rows={2} value={doc.signTitle} onChange={(e) => handleFieldChange("signTitle", e.target.value)} placeholder="VD: TM. ỦY BAN NHÂN DÂN&#10;CHỦ TỊCH" className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 p-2 text-xs font-semibold text-slate-800" />
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-2">
+                    <label htmlFor="field-signName" className="block text-[10px] font-semibold text-slate-700">Họ tên người ký</label>
+                    <input id="field-signName" type="text" value={doc.signName} onChange={(e) => handleFieldChange("signName", e.target.value)} placeholder="Ghi rõ họ và tên người ký" className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 p-2 text-xs font-bold text-slate-800" />
+                  </div>
+                </div>}
+              </section>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <label htmlFor="field-recipients" className="block text-[11px] font-semibold text-slate-700">Nơi nhận · khối riêng</label>
+                <textarea id="field-recipients" rows={3} value={doc.recipients} onChange={(e) => handleFieldChange("recipients", e.target.value)} placeholder="VD: Như Điều 3;&#10;Lưu: VT, TH." className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs text-slate-800" />
               </div>
 
               {/* SECTION: PHỤ LỤC VĂN BẢN ĐỘC LẬP (P0-D / P0-B) */}
@@ -2150,7 +2236,7 @@ export default function App() {
                   <div className="font-semibold text-slate-800">{finding.severity === "attention" ? "Cần xem" : "Gợi ý"} · {({content:"Nội dung",format:"Định dạng",layout:"Bố cục",structure:"Cấu trúc"} as const)[finding.category]}</div>
                   <button type="button" className="shrink-0 text-blue-700 underline" onClick={() => {
                     setAiAuditOpen(false);
-                    const standardFields = new Set(["orgHeader1", "orgHeader2", "nationalHeader1", "nationalHeader2", "referenceNumber", "locationAndDate", "documentType", "subject", "bodyHtml", "signTitle", "signName", "recipients"]);
+                    const standardFields = new Set(["orgHeader1", "orgHeader2", "nationalHeader1", "nationalHeader2", "referenceNumber", "locationAndDate", "documentType", "subject", "addressee", "bodyHtml", "signTitle", "signName", "signatureBlocks", "recipients"]);
                     if (finding.fieldKey && standardFields.has(finding.fieldKey)) document.getElementById(`field-${finding.fieldKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
                     else if (finding.fieldKey === "appendices" || finding.region === "appendix") document.getElementById("section-appendices")?.scrollIntoView({ behavior: "smooth", block: "center" });
                     else if (finding.region === "body") document.getElementById("field-bodyHtml")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2168,7 +2254,7 @@ export default function App() {
                     else document.getElementById("field-bodyHtml")?.scrollIntoView({ behavior: "smooth", block: "center" });
                   }}>Tới vùng này</button>
                 </div>
-                {(finding.fieldKey || finding.blockId) && <p className="mt-1 text-[10px] text-slate-500">Vị trí: {finding.fieldKey ? ({orgHeader1:"Cơ quan cấp trên",orgHeader2:"Cơ quan ban hành",nationalHeader1:"Quốc hiệu",nationalHeader2:"Tiêu ngữ",referenceNumber:"Số và ký hiệu",locationAndDate:"Địa danh, ngày tháng",documentType:"Loại văn bản",subject:"Trích yếu",bodyHtml:"Nội dung chính",signTitle:"Chức vụ người ký",signName:"Họ tên người ký",recipients:"Nơi nhận",signatureHtml:"Bảng ký nhiều người",appendices:"Phụ lục"} as Record<string,string>)[finding.fieldKey] || finding.fieldKey : `Khối nguồn ${finding.blockId}`}</p>}
+                {(finding.fieldKey || finding.blockId) && <p className="mt-1 text-[10px] text-slate-500">Vị trí: {finding.fieldKey ? ({orgHeader1:"Cơ quan cấp trên",orgHeader2:"Cơ quan ban hành",nationalHeader1:"Quốc hiệu",nationalHeader2:"Tiêu ngữ",referenceNumber:"Số và ký hiệu",locationAndDate:"Địa danh, ngày tháng",documentType:"Loại văn bản",subject:"Trích yếu",addressee:"Kính gửi / Đối tượng nhận",bodyHtml:"Nội dung chính",signTitle:"Chức vụ người ký",signName:"Họ tên người ký",signatureBlocks:"Khối người ký",recipients:"Nơi nhận",signatureHtml:"Bảng ký nhiều người",appendices:"Phụ lục"} as Record<string,string>)[finding.fieldKey] || finding.fieldKey : `Khối nguồn ${finding.blockId}`}</p>}
                 <p className="mt-1 text-slate-700">{finding.observation}</p>
                 <p className="mt-1 text-violet-900"><strong>Đề xuất:</strong> {finding.recommendation}</p>
               </div>)}

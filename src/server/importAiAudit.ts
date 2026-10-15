@@ -12,7 +12,7 @@ const regionLabel: Record<AuditRegion, string> = {
 interface AuditItem {
   fieldKey?: string;
   blockId?: string;
-  origin: "Bản đang soạn" | "Trường đã parse" | "Khối nguồn đã parse" | "Phụ lục đã parse";
+  origin: "Bản đang soạn" | "Trường đã parse" | "Khối nguồn đã parse" | "Phụ lục đã parse" | "Người ký đã parse";
   contentKind: string;
   content: string;
   details?: Record<string, unknown>;
@@ -76,6 +76,7 @@ function regionForRole(role: string | undefined): AuditRegion {
 
 function buildRegionItems(input: AuditInput): Map<AuditRegion, AuditItem[]> {
   const { document: doc, structuredImport: source } = input;
+  const isMinutes = /^BIÊN\s+BẢN\b/i.test((doc.documentType || source.fields?.documentType?.value || "").trim());
   const regionItems = new Map<AuditRegion, AuditItem[]>(AUDIT_REGIONS.map(region => [region, []]));
 
   const workingFields: Array<[string, string]> = [
@@ -86,8 +87,8 @@ function buildRegionItems(input: AuditInput): Map<AuditRegion, AuditItem[]> {
     { fieldKey, origin: "Bản đang soạn", contentKind: "giá trị trường" }, value);
 
   const metadataFields: Array<[string, string]> = [
-    ["referenceNumber", doc.referenceNumber], ["locationAndDate", doc.locationAndDate],
-    ["documentType", doc.documentType], ["subject", doc.subject],
+    ["referenceNumber", doc.referenceNumber], ...(!isMinutes ? [["locationAndDate", doc.locationAndDate] as [string, string]] : []),
+    ["documentType", doc.documentType], ["subject", doc.subject], ["addressee", doc.addressee || ""],
   ];
   for (const [fieldKey, value] of metadataFields) pushValue(regionItems, "metadata",
     { fieldKey, origin: "Bản đang soạn", contentKind: "giá trị trường" }, value);
@@ -97,9 +98,16 @@ function buildRegionItems(input: AuditInput): Map<AuditRegion, AuditItem[]> {
   ];
   for (const [fieldKey, value] of footerFields) pushValue(regionItems, "footer",
     { fieldKey, origin: "Bản đang soạn", contentKind: "giá trị trường" }, value);
+  for (const [index, signer] of (doc.signatureBlocks || []).entries()) {
+    const details = { signerIndex: index, sourceBlockIds: signer.sourceBlockIds, status: signer.status };
+    pushValue(regionItems, "footer", { fieldKey: "signatureBlocks", origin: "Bản đang soạn", contentKind: `vai trò người ký ${index + 1}`, details }, signer.role);
+    pushValue(regionItems, "footer", { fieldKey: "signatureBlocks", origin: "Bản đang soạn", contentKind: `hướng dẫn ký ${index + 1}`, details }, signer.instruction);
+    pushValue(regionItems, "footer", { fieldKey: "signatureBlocks", origin: "Bản đang soạn", contentKind: `họ tên người ký ${index + 1}`, details }, signer.name);
+  }
 
   // Keep every extracted field, including parser fields that are not displayed in the standard form.
   for (const [fieldKey, field] of Object.entries(source.fields || {})) {
+    if (isMinutes && fieldKey === "locationAndDate") continue;
     const region: AuditRegion = fieldKey in Object.fromEntries(workingFields) ? "header"
       : fieldKey in Object.fromEntries(metadataFields) ? "metadata"
         : fieldKey in Object.fromEntries(footerFields) ? "footer" : "other";
@@ -111,6 +119,11 @@ function buildRegionItems(input: AuditInput): Map<AuditRegion, AuditItem[]> {
   pushValue(regionItems, "body", { fieldKey: "bodyHtml", origin: "Bản đang soạn", contentKind: "HTML đang soạn" }, doc.bodyHtml);
   pushValue(regionItems, "body", { fieldKey: "bodyHtml", origin: "Khối nguồn đã parse", contentKind: "HTML thân đã parse" }, source.body?.html);
   pushValue(regionItems, "footer", { fieldKey: "signatureHtml", origin: "Khối nguồn đã parse", contentKind: "HTML bảng ký" }, source.signatureHtml);
+  for (const [index, signer] of (source.signatureBlocks || []).entries()) {
+    const details = { signerIndex: index, sourceBlockIds: signer.sourceBlockIds, status: signer.status };
+    pushValue(regionItems, "footer", { fieldKey: "signatureBlocks", origin: "Người ký đã parse", contentKind: `vai trò người ký ${index + 1}`, details }, signer.role);
+    pushValue(regionItems, "footer", { fieldKey: "signatureBlocks", origin: "Người ký đã parse", contentKind: `họ tên người ký ${index + 1}`, details }, signer.name);
+  }
 
   for (const appendix of doc.appendices || []) {
     pushValue(regionItems, "appendix", { fieldKey: "appendices", origin: "Bản đang soạn", contentKind: `tiêu đề phụ lục ${appendix.id}` }, appendix.title);

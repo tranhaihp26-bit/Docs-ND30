@@ -4,14 +4,13 @@
  * và Hướng dẫn số 05-HD/VPTW của Văn phòng Trung ương Đảng.
  * 
  * TÍNH NĂNG CHÍNH:
- * 1. Chèn Quốc hiệu / Tiêu ngữ chuẩn (căn giữa, in hoa, đậm, gạch ngang).
- * 2. Chèn Cơ quan ban hành chuẩn (in hoa, đứng, đậm).
- * 3. Chuẩn hóa Heading (H1, H2, H3) theo chuẩn trình bày văn bản pháp quy:
+ * 1. Soạn body bằng rich text; thông tin văn bản, nơi nhận, phụ lục và người ký được biên tập ở các khối riêng.
+ * 2. Chuẩn hóa Heading (H1, H2, H3) theo chuẩn trình bày văn bản pháp quy:
  *    - H1: Tên loại văn bản (căn giữa, in hoa, đậm, 14pt).
  *    - H2: Phân mục / Lời ban hành (QUYẾT ĐỊNH:, CHƯƠNG I...).
  *    - H3: Điều, Khoản (Điều 1., Khoản 1...).
- * 4. Chèn Căn cứ pháp lý, Khối chữ ký & Nơi nhận.
- * 5. Giữ vững font Times New Roman và giãn dòng 1.15 - 1.25 chuẩn NĐ 30.
+ * 3. Chèn Căn cứ pháp lý hoặc Điều khoản vào body.
+ * 4. Giữ vững font Times New Roman và giãn dòng theo chế độ văn bản.
  */
 
 import React, { useEffect } from "react";
@@ -23,8 +22,7 @@ import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table
 import { 
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, List, ListOrdered, Undo, Redo, 
-  Heading1, Heading2, Heading3, FileText, Building2, Scale, 
-  PenTool, PlusCircle, Bookmark, MapPin, Tag, Table as TableIcon,
+  Scale, PlusCircle, Bookmark, Table as TableIcon,
   Trash2, Plus, Minus
 } from "lucide-react";
 
@@ -92,56 +90,6 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
     return null;
   }
 
-  // ACTION 1: Chèn Quốc hiệu và Tiêu ngữ chuẩn NĐ 30
-  const insertNationalHeader = () => {
-    const line1 = isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
-    const line2 = isParty ? "" : "Độc lập - Tự do - Hạnh phúc";
-    const divider = isParty ? "-------------------" : "------------------------";
-
-    const htmlSnippet = `
-      <p style="text-align: center;"><strong>${line1}</strong></p>
-      ${line2 ? `<p style="text-align: center;"><strong>${line2}</strong></p>` : ""}
-      <p style="text-align: center;"><small>${divider}</small></p>
-      <p></p>
-    `;
-    editor.chain().focus().insertContent(htmlSnippet).run();
-  };
-
-  // ACTION 2: Chèn Tên cơ quan ban hành văn bản
-  // ACTION 2: Chèn Tên cơ quan ban hành văn bản
-  const insertOrgHeader = () => {
-    const parentOrg = isParty ? "[TÊN CẤP ỦY CẤP TRÊN]" : "[TÊN CƠ QUAN CẤP TRÊN]";
-    const org = isParty ? "[TÊN CẤP ỦY BAN HÀNH]" : "[TÊN CƠ QUAN BAN HÀNH]";
-    const refNum = isParty ? "Số: ...-NQ/[MÃ CẤP ỦY]" : "Số: .../[MÃ VĂN BẢN]";
-
-    const htmlSnippet = `
-      <p style="text-align: center;">${parentOrg}</p>
-      <p style="text-align: center;"><strong>${org}</strong></p>
-      <p style="text-align: center;"><small>-------------</small></p>
-      <p style="text-align: center;">${refNum}</p>
-      <p></p>
-    `;
-    editor.chain().focus().insertContent(htmlSnippet).run();
-  };
-
-  // ACTION: Chèn Địa danh & Ngày tháng (Canh phải, in nghiêng, chuẩn NĐ 30)
-  const insertLocationAndDate = () => {
-    const today = new Date();
-    const day = today.getDate();
-    const month = today.getMonth() + 1;
-    const year = today.getFullYear();
-    const dayStr = day < 10 ? `0${day}` : `${day}`;
-    const monthStr = (month === 1 || month === 2) ? `0${month}` : `${month}`;
-    const htmlSnippet = `<p style="text-align: right;"><em>[Địa danh], ngày ${dayStr} tháng ${monthStr} năm ${year}</em></p><p></p>`;
-    editor.chain().focus().insertContent(htmlSnippet).run();
-  };
-
-  // ACTION: Chèn Trích yếu nội dung (Căn giữa, in đậm và nghiêng)
-  const insertSubject = () => {
-    const htmlSnippet = `<p style="text-align: center;"><strong><em>V/v [Trích yếu nội dung văn bản ngắn gọn, súc tích]</em></strong></p><p></p>`;
-    editor.chain().focus().insertContent(htmlSnippet).run();
-  };
-
   // ACTION 3: Chèn Căn cứ pháp lý
   const insertLegalGround = () => {
     const groundText = isParty
@@ -158,34 +106,6 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
       <p style="text-indent: 1.27cm;">2. Nội dung khoản 2 chi tiết...</p>
     `;
     editor.chain().focus().insertContent(articleHtml).run();
-  };
-
-  // ACTION 5: Chèn Khối chữ ký & Nơi nhận chuẩn NĐ 30
-  const insertSignatureBlock = () => {
-    const signTitle = isParty ? "T/M [CẤP ỦY BAN HÀNH]<br/>[CHỨC VỤ NGƯỜI KÝ]" : "TM. [CƠ QUAN BAN HÀNH]<br/>[CHỨC VỤ NGƯỜI KÝ]";
-    const recipients = isParty ? "Như [thành phần];<br/>Lưu: VT, [Đơn vị]." : "Như [thành phần];<br/>Lưu: VT, [Đơn vị].";
-
-    const htmlSnippet = `
-      <br/>
-      <table style="width: 100%; border: none; margin-top: 20px;">
-        <tbody>
-          <tr>
-            <td style="width: 50%; vertical-align: top; font-size: 11pt;">
-              <p><strong><em>Nơi nhận:</em></strong></p>
-              <p>- ${recipients}</p>
-            </td>
-            <td style="width: 50%; text-align: center; vertical-align: top;">
-              <p><strong>${signTitle}</strong></p>
-              <p><em>(Ký, ghi rõ họ tên và đóng dấu)</em></p>
-              <br/><br/><br/>
-              <p><strong>[Họ và tên người ký]</strong></p>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p></p>
-    `;
-    editor.chain().focus().insertContent(htmlSnippet).run();
   };
 
   return (

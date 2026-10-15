@@ -21,7 +21,7 @@ export const MINUTES_TEMPLATE: TemplatePreset = {
     orgHeader2: "",
     nationalHeader1: "",
     nationalHeader2: "",
-    locationAndDate: "[Địa danh], ngày … tháng … năm …",
+    locationAndDate: "",
     documentType: "BIÊN BẢN",
     referenceNumber: "Số: …/BB-[CHỮ VIẾT TẮT CƠ QUAN]",
     subject: "[Tên cuộc họp, hội nghị, hội thảo hoặc buổi làm việc]",
@@ -34,23 +34,13 @@ export const MINUTES_TEMPLATE: TemplatePreset = {
       <p><strong>Nội dung (theo diễn biến cuộc họp/hội nghị/hội thảo):</strong></p>
       <p>[Ghi lần lượt diễn biến, ý kiến và kết luận/thoả thuận; giữ đúng nội dung đã được phát biểu hoặc thống nhất.]</p>
       <p><strong>Cuộc họp (hội nghị, hội thảo) kết thúc vào:</strong> [ … giờ … phút, ngày … tháng … năm …]</p>
-      <table style="width:100%;border:none;border-collapse:collapse;margin-top:20px">
-        <tbody><tr>
-          <td style="width:50%;border:none;text-align:center;vertical-align:top">
-            <p style="text-align:center"><strong>THƯ KÝ</strong></p>
-            <p style="text-align:center"><em>(Ký, ghi rõ họ tên)</em></p>
-            <p style="text-align:center"><br/><br/><br/><strong>[Họ và tên]</strong></p>
-          </td>
-          <td style="width:50%;border:none;text-align:center;vertical-align:top">
-            <p style="text-align:center"><strong>CHỦ TỌA</strong></p>
-            <p style="text-align:center"><em>(Ký, ghi rõ họ tên)</em></p>
-            <p style="text-align:center"><br/><br/><br/><strong>[Họ và tên]</strong></p>
-          </td>
-        </tr></tbody>
-      </table>
     `,
-    signTitle: "[Chữ ký thư ký và chủ tọa nằm trong bảng ở trên]",
-    signName: "[Điền họ tên tại bảng chữ ký]",
+    signTitle: "",
+    signName: "",
+    signatureBlocks: [
+      { id: "minutes-secretary", role: "THƯ KÝ", instruction: "(Ký, ghi rõ họ tên)", name: "[Họ và tên]", status: "needs_review" },
+      { id: "minutes-chair", role: "CHỦ TỌA", instruction: "(Ký, ghi rõ họ tên)", name: "[Họ và tên]", status: "needs_review" },
+    ],
     recipients: "Lưu: VT, hồ sơ.",
   },
 };

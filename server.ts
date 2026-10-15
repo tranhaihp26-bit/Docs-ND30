@@ -67,8 +67,10 @@ const auditRequest = z.object({
   standardType: z.enum(["state", "party"]),
   document: z.object({
     orgHeader1: auditText, orgHeader2: auditText, nationalHeader1: auditText, nationalHeader2: auditText,
-    referenceNumber: auditText, locationAndDate: auditText, documentType: auditText, subject: auditText,
+    referenceNumber: auditText, locationAndDate: auditText, documentType: auditText, subject: auditText, addressee: auditText.optional(),
     bodyHtml: auditText, signTitle: auditText, signName: auditText, recipients: auditText,
+    signatureBlocks: z.array(z.object({ id: z.string().max(200), role: auditText, instruction: auditText, name: auditText,
+      sourceBlockIds: z.array(z.string().max(200)).max(10000).optional(), status: z.string().max(40).optional() }).strict()).max(1000).optional(),
     appendices: z.array(z.object({ id: z.string().max(200), title: auditText, referenceText: auditText.optional(), html: auditText }).strict()).max(1000).optional(),
   }).strict(),
   structuredImport: z.object({
@@ -76,7 +78,10 @@ const auditRequest = z.object({
       detectedRegime: z.enum(["administrative", "party", "unknown"]).optional() }).strict(),
     fields: z.record(z.string().max(200), auditField).refine(fields => Object.keys(fields).length <= 200),
     body: z.object({ html: auditText, sourceBlockIds: z.array(z.string().max(200)).max(10000) }).strict(),
-    signatureHtml: auditText.optional(), blocks: z.array(auditSourceBlock).max(10000),
+    signatureHtml: auditText.optional(),
+    signatureBlocks: z.array(z.object({ id: z.string().max(200), role: auditText, instruction: auditText, name: auditText,
+      sourceBlockIds: z.array(z.string().max(200)).max(10000).optional(), status: z.string().max(40).optional() }).strict()).max(1000).optional(),
+    blocks: z.array(auditSourceBlock).max(10000),
     appendices: z.array(auditAppendix).max(1000), unclassified: z.array(auditSourceBlock).max(10000),
     order: z.array(z.string().max(200)).max(10000),
   }).strict(),

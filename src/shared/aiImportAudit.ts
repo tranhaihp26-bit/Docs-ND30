@@ -36,8 +36,9 @@ export interface AiImportAudit {
 
 export interface AuditWorkingDocument {
   orgHeader1: string; orgHeader2: string; nationalHeader1: string; nationalHeader2: string;
-  referenceNumber: string; locationAndDate: string; documentType: string; subject: string;
+  referenceNumber: string; locationAndDate: string; documentType: string; subject: string; addressee?: string;
   bodyHtml: string; signTitle: string; signName: string; recipients: string;
+  signatureBlocks?: Array<{ id: string; role: string; instruction: string; name: string; sourceBlockIds?: string[]; status?: string }>;
   appendices?: Array<{ id: string; title: string; referenceText?: string; html: string }>;
 }
 

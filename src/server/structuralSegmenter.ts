@@ -12,6 +12,7 @@ import type {
   SourceRegion,
 } from "../shared/schemas/document.schema.ts";
 import { detectDocumentType } from "./parser.ts";
+import { getSignatureBlocksFromTable } from "../utils/documentStructure.ts";
 
 /**
  * Standard regex patterns for Vietnamese administrative & party documents
@@ -99,6 +100,7 @@ export function segmentSourceBlocks(
     locationAndDate: { value: null, confidence: "low", status: "missing", sourceBlockIds: [] },
     documentType: { value: null, confidence: "low", status: "missing", sourceBlockIds: [] },
     subject: { value: null, confidence: "low", status: "missing", sourceBlockIds: [] },
+    addressee: { value: null, confidence: "low", status: "missing", sourceBlockIds: [] },
     signTitle: { value: null, confidence: "low", status: "missing", sourceBlockIds: [] },
     signName: { value: null, confidence: "low", status: "missing", sourceBlockIds: [] },
     recipients: { value: null, confidence: "low", status: "missing", sourceBlockIds: [] },
@@ -116,6 +118,7 @@ export function segmentSourceBlocks(
       blocks: [],
       fields,
       body: { html: "", sourceBlockIds: [] },
+      signatureBlocks: [],
       appendices: [],
       unclassified: [],
       order: [],
@@ -358,6 +361,42 @@ export function segmentSourceBlocks(
     }
   }
 
+  // Addressee is a separate document component for correspondence, reports,
+  // submissions and similar forms; do not include it in bodyHtml.
+  if (nextStartIndex < total) {
+    let addresseeIndex = nextStartIndex;
+    while (addresseeIndex < total && blocks[addresseeIndex].kind === "paragraph" && !blocks[addresseeIndex].text.trim()) {
+      addresseeIndex++;
+    }
+    const first = blocks[addresseeIndex];
+    const match = first?.kind === "paragraph" ? first.text.trim().match(/^Kính gửi\s*:\s*(.*)$/i) : null;
+    if (match) {
+      for (let index = nextStartIndex; index < addresseeIndex; index++) blocks[index].role = "separator";
+      const sourceBlockIds = [first.id];
+      let value = match[1].trim();
+      first.role = "metadata";
+      let continuationIndex = addresseeIndex + 1;
+      while (continuationIndex < total && blocks[continuationIndex].kind === "paragraph" && !blocks[continuationIndex].text.trim()) {
+        blocks[continuationIndex].role = "separator";
+        continuationIndex++;
+      }
+      if (!value && continuationIndex < total && blocks[continuationIndex].kind === "paragraph") {
+        const continuation = blocks[continuationIndex];
+        value = continuation.text.trim();
+        continuation.role = "metadata";
+        sourceBlockIds.push(continuation.id);
+        addresseeIndex = continuationIndex;
+      }
+      fields.addressee = {
+        value: value || null,
+        confidence: value ? "high" : "low",
+        status: value ? "extracted" : "missing",
+        sourceBlockIds,
+      };
+      nextStartIndex = addresseeIndex + 1;
+    }
+  }
+
   // =========================================================================
   // STEP 4: APPENDICES DETECTION (Looking from end forward or finding headings)
   // =========================================================================
@@ -435,6 +474,7 @@ export function segmentSourceBlocks(
   // Search from bodyEndExclusive - 1 backwards
   let sigFoundIndex = -1;
   let signatureHtml: string | undefined;
+  let signatureBlocks: ReturnType<typeof getSignatureBlocksFromTable> = [];
   for (let i = bodyEndExclusive - 1; i >= nextStartIndex; i--) {
     const b = blocks[i];
     if (b.kind === "table" && b.tableShape && b.tableShape.columns >= 2) {
@@ -454,6 +494,10 @@ export function segmentSourceBlocks(
         sigFoundIndex = i;
         b.role = "signature";
         if (isMinutesSignTable) signatureHtml = b.html || undefined;
+        signatureBlocks = getSignatureBlocksFromTable(data).map(block => ({
+          ...block,
+          sourceBlockIds: [b.id],
+        }));
 
         // Extract recipients and signature fields
         const leftCol = data.map(r => r[0] || "").join("\n");
@@ -571,6 +615,7 @@ export function segmentSourceBlocks(
       sourceBlockIds: bodyBlockIds,
     },
     signatureHtml,
+    signatureBlocks,
     appendices,
     unclassified: unclassifiedBlocks,
     order,

@@ -2,6 +2,15 @@ import { z } from "zod";
 import { COMPANY_HEADER_PROFILE_ID } from "../../canonical/nd30/companyHeader.ts";
 import { auditCanonicalND30 } from "../../canonical/nd30/canonicalAudit.ts";
 
+const DocumentSignatureBlockSchema = z.object({
+  id: z.string(),
+  role: z.string(),
+  instruction: z.string().default("(Ký, ghi rõ họ tên)"),
+  name: z.string(),
+  sourceBlockIds: z.array(z.string()).optional(),
+  status: z.enum(["extracted", "needs_review", "user_confirmed"]).optional(),
+});
+
 /**
  * @file document.schema.ts
  * @description Zod validation schema cho cấu trúc văn bản hành chính nhà nước (Nghị định 30/2020/NĐ-CP)
@@ -126,7 +135,7 @@ export const DocumentFormatSchema = z.object({
    * Địa danh và thời gian ban hành văn bản
    * Định dạng chuẩn NĐ 30: "Địa danh, ngày ... tháng ... năm ..." (chữ nghiêng, cỡ 13-14)
    */
-  locationAndDate: z.string().min(5, "Địa danh và ngày tháng không hợp lệ"),
+  locationAndDate: z.string().min(5, "Địa danh và ngày tháng không hợp lệ").or(z.literal("")),
 
   /**
    * Tên loại văn bản
@@ -146,6 +155,9 @@ export const DocumentFormatSchema = z.object({
    */
   subject: z.string().min(1, "Trích yếu nội dung văn bản không được để trống"),
 
+  /** Recipient/addressee line used by correspondence, reports and submissions. */
+  addressee: z.string().optional(),
+
   /**
    * Nội dung chi tiết văn bản (HTML ngữ nghĩa)
    * Phân chia thành các căn cứ, Điều, Khoản, Điểm hoặc Phần I, II, III...
@@ -162,6 +174,9 @@ export const DocumentFormatSchema = z.object({
    * Họ và tên người ký
    */
   signName: z.string().min(1, "Họ tên người ký không được để trống"),
+
+  /** One independent block per signatory for minutes and multi-signer documents. */
+  signatureBlocks: z.array(DocumentSignatureBlockSchema).optional(),
 
   /**
    * Nơi nhận văn bản
@@ -260,6 +275,15 @@ export interface StructuredImport {
   };
   /** Original multi-signer table, kept separately from the body region. */
   signatureHtml?: string;
+  /** Signatories extracted from the original signature table, one block per person. */
+  signatureBlocks?: Array<{
+    id: string;
+    role: string;
+    instruction: string;
+    name: string;
+    sourceBlockIds?: string[];
+    status?: "extracted" | "needs_review" | "user_confirmed";
+  }>;
   appendices: AppendixDocument[];
   unclassified: SourceBlock[];
   order: string[];
@@ -299,7 +323,8 @@ export function validateND30Compliance(
   const issues: ND30ComplianceIssue[] = [];
   const isParty = regime === "party";
   let passedChecks = 0;
-  const totalChecks = 9;
+  const isMinutes = /^BIÊN\s+BẢN\b/i.test(String(doc.documentType || "").trim());
+  const totalChecks = isMinutes ? 8 : 9;
 
   // 1. Quốc hiệu
   const expectedH1 = isParty ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
@@ -391,8 +416,8 @@ export function validateND30Compliance(
     passedChecks++;
   }
 
-  // 5. Địa danh và ngày tháng
-  if (isPlaceholderValue(doc.locationAndDate)) {
+  // Mẫu 1.9 ghi thời gian bắt đầu/kết thúc trong thân biên bản, không dùng dòng ngày ban hành ở đầu trang.
+  if (!isMinutes && isPlaceholderValue(doc.locationAndDate)) {
     issues.push({
       id: "locationAndDate_missing",
       field: "locationAndDate",
@@ -400,7 +425,7 @@ export function validateND30Compliance(
       message: "Văn bản chưa có địa danh hoặc ngày tháng ban hành cụ thể (đang sử dụng placeholder).",
       severity: "warning",
     });
-  } else if (!LOCATION_AND_DATE_REGEX.test(doc.locationAndDate.trim())) {
+  } else if (!isMinutes && !LOCATION_AND_DATE_REGEX.test(doc.locationAndDate.trim())) {
     issues.push({
       id: "locationAndDate_format",
       field: "locationAndDate",
@@ -408,7 +433,7 @@ export function validateND30Compliance(
       message: "Phải có định dạng: '[Địa danh], ngày dd tháng mm năm yyyy' (in nghiêng). Ngày dưới 10 và tháng 1, 2 phải có số 0 ở trước.",
       severity: "warning",
     });
-  } else {
+  } else if (!isMinutes) {
     passedChecks++;
   }
 

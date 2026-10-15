@@ -565,8 +565,10 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const topHtmlUpper = data.bodyHtml ? data.bodyHtml.slice(0, 1500).toUpperCase() : "";
 
   const hasEmbeddedHeader = topHtmlUpper.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") || topHtmlUpper.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
+  const hasEmbeddedAddressee = /Kính gửi\s*:/i.test(data.bodyHtml);
   const hasEmbeddedSignature = detectEmbeddedSignature(data.bodyHtml, data.documentType);
   const isMinutes = /BIÊN\s+BẢN/i.test(data.documentType);
+  const hasStructuredSignatures = Boolean(data.signatureBlocks?.length);
   const hasMinutesRecipientInBody = /NƠI NHẬN\s*:/i.test(data.bodyHtml);
   const minutesRecipientLines = (data.recipients || "")
     .replace(/^\s*Nơi nhận\s*:\s*/i, "")
@@ -577,7 +579,9 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const isSignaturePlaceholder = (!data.signTitle || isPlaceholderValue(data.signTitle)) && (!data.signName || isPlaceholderValue(data.signName));
 
   const shouldRenderHeader = useCompanyHeader ? !hasEmbeddedHeader : (!hasEmbeddedHeader && !isHeaderPlaceholder && (Boolean(data.orgHeader2) || Boolean(data.referenceNumber)));
-  const shouldRenderSignature = !hasEmbeddedSignature && !isSignaturePlaceholder && (Boolean(data.signTitle) || Boolean(data.signName));
+  const shouldRenderSignature = !hasEmbeddedSignature && !hasStructuredSignatures && !isSignaturePlaceholder && (Boolean(data.signTitle) || Boolean(data.signName));
+  const shouldRenderStructuredSignatures = !hasEmbeddedSignature && hasStructuredSignatures;
+  const shouldRenderStructuredRecipients = isMinutes && !hasEmbeddedSignature && minutesRecipientLines.length > 0;
 
   return new Document({
     styles: {
@@ -648,7 +652,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
           // 1. HEADER KHỐI ĐẦU TRANG (BẢNG ẨN 2 CỘT)
           // ==========================================
           ...(shouldRenderHeader && useCompanyHeader ? [
-            createCompanyHeaderTable(data.referenceNumber, data.locationAndDate),
+            createCompanyHeaderTable(data.referenceNumber, isMinutes ? null : data.locationAndDate),
             new Paragraph({ text: "", spacing: { after: 120 } }),
           ] : []),
           ...(shouldRenderHeader && !useCompanyHeader ? [
@@ -766,7 +770,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                           }),
                         ] : []),
                         // Địa danh và ngày, tháng, năm ban hành
-                        new Paragraph({
+                        ...(!isMinutes ? [new Paragraph({
                           alignment: AlignmentType.CENTER,
                           spacing: { line: 240, after: 60 },
                           children: [
@@ -777,7 +781,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                               italics: true,
                             }),
                           ],
-                        }),
+                        })] : []),
                       ],
                     }),
                   ],
@@ -823,12 +827,32 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
             }),
           ] : []),
 
+          ...(!hasEmbeddedAddressee && data.addressee ? data.addressee.split(/\r?\n/).filter(Boolean).map((line, index) => new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 40, after: 40, line: 276 },
+            children: [
+              ...(index === 0 ? [new TextRun({ text: "Kính gửi: ", font: "Times New Roman", size: profile.bodyFontSize * 2, bold: true })] : []),
+              new TextRun({ text: line, font: "Times New Roman", size: profile.bodyFontSize * 2 }),
+            ],
+          })) : []),
+
           // ==========================================
           // 4. TOÀN BỘ NỘI DUNG VĂN BẢN (TỪ TIPTAP HTML)
           // ==========================================
           ...bodyParagraphs,
 
           ...(shouldRenderMinutesRecipients ? [
+            new Paragraph({
+              spacing: { before: 100, after: 40, line: 220 },
+              children: [new TextRun({ text: "Nơi nhận:", font: "Times New Roman", size: 22, bold: true, italics: true })],
+            }),
+            ...minutesRecipientLines.map(line => new Paragraph({
+              spacing: { before: 20, after: 20, line: 220 },
+              children: [new TextRun({ text: line.startsWith("-") ? line : `- ${line}`, font: "Times New Roman", size: 22 })],
+            })),
+          ] : []),
+
+          ...(shouldRenderStructuredRecipients ? [
             new Paragraph({
               spacing: { before: 100, after: 40, line: 220 },
               children: [new TextRun({ text: "Nơi nhận:", font: "Times New Roman", size: 22, bold: true, italics: true })],
@@ -952,6 +976,44 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
                   ],
                 }),
               ],
+            }),
+          ] : []),
+
+          ...(shouldRenderStructuredSignatures ? [
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: {
+                top: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                left: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                right: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              },
+              rows: [new TableRow({
+                children: (data.signatureBlocks || []).map(block => new TableCell({
+                  width: { size: 100 / Math.max(1, data.signatureBlocks?.length || 1), type: WidthType.PERCENTAGE },
+                  borders: INVISIBLE_CELL_BORDER,
+                  children: [
+                    ...block.role.split("\n").map(line => new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      spacing: { line: 240, after: 20 },
+                      children: [new TextRun({ text: line.trim().toLocaleUpperCase("vi-VN"), font: "Times New Roman", size: profile.signTitleFontSize * 2, bold: true })],
+                    })),
+                    new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      spacing: { line: 240, after: 40 },
+                      children: [new TextRun({ text: block.instruction || "(Ký, ghi rõ họ tên)", font: "Times New Roman", size: 20, italics: true })],
+                    }),
+                    new Paragraph({ text: "", spacing: { before: 240, after: 360 } }),
+                    new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      spacing: { line: 240, before: 120 },
+                      children: [new TextRun({ text: block.name, font: "Times New Roman", size: profile.signNameFontSize * 2, bold: true })],
+                    }),
+                  ],
+                })),
+              })],
             }),
           ] : []),
 

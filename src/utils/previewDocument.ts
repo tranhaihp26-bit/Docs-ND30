@@ -1,5 +1,6 @@
 import { enforceND30Standards } from "../server/middleware/compliance.middleware.ts";
 import type { DocumentFormatType, SourceBlock } from "../shared/schemas/document.schema.ts";
+import type { DocumentSignatureBlock } from "./documentStructure.ts";
 
 export interface PreviewDocumentSource {
   headerProfile?: DocumentFormatType["headerProfile"];
@@ -11,10 +12,12 @@ export interface PreviewDocumentSource {
   locationAndDate?: string;
   documentType?: string;
   subject?: string;
+  addressee?: string;
   bodyHtml?: string;
   recipients?: string;
   signTitle?: string;
   signName?: string;
+  signatureBlocks?: DocumentSignatureBlock[];
   regime?: "administrative" | "party";
   appendices?: any[];
   unclassified?: SourceBlock[];

@@ -70,6 +70,7 @@ for (const sentinel of [
   "APPENDIX_TABLE_SENTINEL",
 ]) assert.ok(contents.includes(sentinel), `audit input includes ${sentinel}`);
 assert.ok(!chunks.some(chunk => chunk.text.includes("filename")), "source filename is not sent to the model");
+assert.ok(!contents.includes("Hải Phòng, ngày 01 tháng 10 năm 2026"), "minutes review does not treat a generic header issue-date field as applicable");
 
 const longText = "LONG_BODY_SENTINEL_" + "nội dung dài ".repeat(2400);
 const longInput = fixture();

@@ -400,14 +400,15 @@ async function main() {
     assert.ok(result.signatureHtml?.includes("Nguyễn Văn Bình"));
     assert.ok(result.signatureHtml?.includes("Trần Văn An"));
     assert.ok(result.signatureHtml?.includes("Lê Thị Lan"));
+    assert.deepEqual(result.signatureBlocks?.map(block => block.name), ["Nguyễn Văn Bình", "Trần Văn An", "Lê Thị Lan"]);
     const importedBodyHtml = composeImportedBodyHtml(result);
-    assert.equal(detectEmbeddedSignature(importedBodyHtml), true);
+    assert.equal(detectEmbeddedSignature(importedBodyHtml), false, "parsed signatures do not enter the body editor");
     const docx = generateND30DocxDocument({
       regime: "administrative", headerProfile: "generic", nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
       nationalHeader2: "Độc lập - Tự do - Hạnh phúc", fontFamily: "Times New Roman", fontSize: 13,
       orgHeader1: "", orgHeader2: "CƠ QUAN THỬ NGHIỆM", locationAndDate: "Hà Nội, ngày 15 tháng 10 năm 2026",
       documentType: "BIÊN BẢN LÀM VIỆC VỚI CÁN BỘ", referenceNumber: "Số: 01/BB", subject: "Về việc trao đổi công việc",
-      bodyHtml: importedBodyHtml, signTitle: "THƯ KÝ", signName: "Lê Thị Lan", recipients: "",
+      bodyHtml: importedBodyHtml, signTitle: "", signName: "", signatureBlocks: result.signatureBlocks, recipients: "",
     });
     const zip = await JSZip.loadAsync(await Packer.toBuffer(docx));
     const xml = await zip.file("word/document.xml")!.async("string");

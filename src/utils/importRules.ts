@@ -86,7 +86,12 @@ export function buildImportReview(source: StructuredImport, selectedRegime: "adm
   }
 
   fieldCheck("IMPORT.REFERENCE_COMPLETE", "metadata", "Số và ký hiệu", "referenceNumber", v => /^Số\s*:?\s*\S+/i.test(v) && !isPlaceholderValue(v));
-  fieldCheck("ND30.PL1.I.II.4B.ISSUE_DATE_FULL", "metadata", "Địa danh, ngày ban hành", "locationAndDate", v => LOCATION_AND_DATE_REGEX.test(v) && !isPlaceholderValue(v));
+  const isMinutes = /^BIÊN\s+BẢN\b/i.test(value("documentType"));
+  if (isMinutes && selectedRegime === "administrative") {
+    add("ND30.PL1.I.II.4B.ISSUE_DATE_FULL", "metadata", "Địa danh, ngày ban hành", "NOT_APPLICABLE", "Mẫu 1.9 ghi thời gian bắt đầu/kết thúc trong thân biên bản, không có dòng ngày ban hành ở phần đầu.");
+  } else {
+    fieldCheck("ND30.PL1.I.II.4B.ISSUE_DATE_FULL", "metadata", "Địa danh, ngày ban hành", "locationAndDate", v => LOCATION_AND_DATE_REGEX.test(v) && !isPlaceholderValue(v));
+  }
   fieldCheck("IMPORT.SUBJECT_PRESENT", "metadata", "Trích yếu", "subject", v => !isPlaceholderValue(v));
   const isOfficialLetter = /^CÔNG VĂN\b/i.test(value("documentType"));
   if (selectedRegime === "administrative" && !isOfficialLetter) {
@@ -113,7 +118,6 @@ export function buildImportReview(source: StructuredImport, selectedRegime: "adm
   const hasSignature = Boolean(source.signatureHtml || value("signTitle") || value("signName"));
   add("IMPORT.SIGNATURE_PRESENT", "footer", "Phần ký", hasSignature ? "PASS" : "NEEDS_REVIEW",
     hasSignature ? "Có phần ký trong nguồn; phải đối chiếu trực quan chức vụ và họ tên." : "Chưa tìm thấy phần ký.", [...ids("signTitle"), ...ids("signName")]);
-  const isMinutes = /^BIÊN BẢN\b/i.test(value("documentType"));
   add("IMPORT.RECIPIENTS", "footer", "Nơi nhận", isMinutes && !value("recipients") ? "NOT_APPLICABLE" : value("recipients") ? "PASS" : "NEEDS_REVIEW",
     isMinutes && !value("recipients") ? "Biên bản nguồn không có Nơi nhận; không tự thêm." : value("recipients") ? "Có Nơi nhận trong nguồn." : "Chưa tìm thấy Nơi nhận.", ids("recipients"));
 

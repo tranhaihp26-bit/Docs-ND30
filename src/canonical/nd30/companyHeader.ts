@@ -73,7 +73,7 @@ const rightAligned = (runs: TextRun[]) => new Paragraph({
 });
 
 /** Company header follows the source Word table; contains NO visible table grid. */
-export function createCompanyHeaderTable(referenceNumber?: string, locationAndDate?: string): Table {
+export function createCompanyHeaderTable(referenceNumber?: string, locationAndDate?: string | null): Table {
   return new Table({
     width: { size: SOURCE_TABLE_TWIPS.width, type: WidthType.DXA },
     indent: { size: SOURCE_TABLE_TWIPS.indent, type: WidthType.DXA },
@@ -117,7 +117,7 @@ export function createCompanyHeaderTable(referenceNumber?: string, locationAndDa
           new TableCell({
             width: { size: SOURCE_TABLE_TWIPS.right, type: WidthType.DXA },
             borders: INVISIBLE,
-            children: [rightAligned([RUN(locationAndDate?.trim() || "Hải Phòng, ngày … tháng … năm …", 13, false, true)])],
+            children: locationAndDate === null ? [new Paragraph({ text: "" })] : [rightAligned([RUN(locationAndDate?.trim() || "Hải Phòng, ngày … tháng … năm …", 13, false, true)])],
           }),
         ],
       }),
@@ -126,6 +126,8 @@ export function createCompanyHeaderTable(referenceNumber?: string, locationAndDa
 }
 
 export function applyCompanyProfile<T extends object>(input: T): T & {headerProfile: typeof COMPANY_HEADER_PROFILE_ID} {
+  const documentType = String((input as any).documentType || "").trim();
+  const locationAndDate = typeof (input as any).locationAndDate === "string" ? (input as any).locationAndDate.trim() : "";
   return {
     ...input,
     headerProfile: COMPANY_HEADER_PROFILE_ID,
@@ -133,9 +135,9 @@ export function applyCompanyProfile<T extends object>(input: T): T & {headerProf
     orgHeader2: COMPANY_HEADER_ISSUER,
     nationalHeader1: COMPANY_NATIONAL_HEADER,
     nationalHeader2: COMPANY_MOTTO,
-    locationAndDate: typeof (input as any).locationAndDate === "string" &&
-      (input as any).locationAndDate.trim() && !(input as any).locationAndDate.includes("[Địa danh]")
-      ? (input as any).locationAndDate : "Hải Phòng, ngày … tháng … năm …",
+    locationAndDate: locationAndDate && !locationAndDate.includes("[Địa danh]")
+      ? (input as any).locationAndDate
+      : /^BIÊN\s+BẢN\b/i.test(documentType) ? "" : "Hải Phòng, ngày … tháng … năm …",
   };
 }
 
