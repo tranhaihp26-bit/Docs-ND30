@@ -168,9 +168,97 @@ export const DocumentFormatSchema = z.object({
    * Ví dụ: "Như Điều 3;\nLưu: VT, TH."
    */
   recipients: z.string().min(1, "Nơi nhận văn bản không được để trống"),
+
+  /**
+   * Phụ lục văn bản độc lập (P0-07 / P0-B / P0-C)
+   */
+  appendices: z.array(z.any()).optional(),
+
+  /**
+   * Các khối chưa phân loại (unclassified blocks)
+   */
+  unclassified: z.array(z.any()).optional(),
+
+  /**
+   * Metadata nguồn tải lên / import
+   */
+  importMetadata: z.object({
+    sourceType: z.enum(["template", "docx", "txt", "paste"]).optional(),
+    status: z.enum(["parsed", "needs_review", "confirmed"]).optional(),
+    sourceFilename: z.string().optional(),
+  }).optional(),
 });
 
 export type DocumentFormatType = z.infer<typeof DocumentFormatSchema>;
+
+export type SourceBlockKind = "paragraph" | "table" | "section-break";
+
+export type SourceRegion =
+  | "header"
+  | "metadata"
+  | "body"
+  | "signature"
+  | "recipients"
+  | "appendix"
+  | "separator"
+  | "unclassified";
+
+export interface SourceBlock {
+  id: string;
+  index: number;
+  kind: SourceBlockKind;
+  text: string;
+  html?: string;
+  tableShape?: {
+    rows: number;
+    columns: number;
+  };
+  tableData?: string[][];
+  style?: string;
+  role?: SourceRegion;
+  sourcePath?: string;
+}
+
+export interface ExtractedField<T = string> {
+  value: T | null;
+  confidence: "high" | "medium" | "low";
+  status: "extracted" | "missing" | "ambiguous" | "user_confirmed";
+  sourceBlockIds: string[];
+  note?: string;
+}
+
+export interface AppendixDocument {
+  id: string;
+  title: string;
+  referenceText?: string;
+  html: string;
+  blocks: SourceBlock[];
+  sourceBlockIds: string[];
+  extractionStatus: "confirmed" | "needs_review";
+  tables?: Array<{
+    rows: number;
+    columns: number;
+    rowCount?: number;
+    colCount?: number;
+    data?: string[][];
+  }>;
+}
+
+export interface StructuredImport {
+  source: {
+    filename: string;
+    type: "docx" | "txt";
+    blockCount: number;
+  };
+  fields: Record<string, ExtractedField<string>>;
+  body: {
+    html: string;
+    sourceBlockIds: string[];
+  };
+  appendices: AppendixDocument[];
+  unclassified: SourceBlock[];
+  order: string[];
+}
 
 /**
  * Loại cảnh báo / vi phạm thể thức

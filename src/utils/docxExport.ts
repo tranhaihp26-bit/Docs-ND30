@@ -19,7 +19,7 @@
 import { 
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, 
   WidthType, BorderStyle, AlignmentType, convertMillimetersToTwip, PageOrientation,
-  Header, PageNumber, LevelFormat
+  Header, PageNumber, LevelFormat, PageBreak
 } from "docx";
 import { type DocumentFormatType, isPlaceholderValue } from "../shared/schemas/document.schema.ts";
 import { COMPANY_HEADER_PROFILE_ID, createCompanyHeaderTable, COMPANY_HEADER_GEOMETRY_MM } from "../canonical/nd30/companyHeader.ts";
@@ -884,6 +884,44 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
               ],
             }),
           ] : []),
+
+          // ==========================================
+          // 6. PHỤ LỤC ĐỘC LẬP (NẾU CÓ TRONG data.appendices)
+          // ==========================================
+          ...((data.appendices && Array.isArray(data.appendices) && data.appendices.length > 0)
+            ? data.appendices.flatMap((app: any) => [
+                new Paragraph({
+                  children: [new PageBreak()],
+                }),
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 240, after: 120, line: 276 },
+                  children: [
+                    new TextRun({
+                      text: (app.title || "PHỤ LỤC").toUpperCase(),
+                      font: "Times New Roman",
+                      size: profile.bodyFontSize * 2,
+                      bold: true,
+                    }),
+                  ],
+                }),
+                ...(app.referenceText ? [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 60, after: 180, line: 276 },
+                    children: [
+                      new TextRun({
+                        text: app.referenceText,
+                        font: "Times New Roman",
+                        size: profile.bodyFontSize * 2,
+                        italics: true,
+                      }),
+                    ],
+                  }),
+                ] : []),
+                ...convertHtmlToDocxElements(app.html || "", data.regime),
+              ])
+            : []),
         ],
       },
     ],

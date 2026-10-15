@@ -178,6 +178,7 @@ export function enforceND30Standards(
   // Tạo đối tượng đã chuẩn hóa toàn diện
   const normalizedCandidate = {
     regime,
+    headerProfile: source.headerProfile,
     nationalHeader1,
     nationalHeader2,
     fontFamily,
@@ -192,6 +193,9 @@ export function enforceND30Standards(
     signTitle,
     signName,
     recipients,
+    appendices: Array.isArray(source.appendices) ? source.appendices : [],
+    unclassified: Array.isArray(source.unclassified) ? source.unclassified : [],
+    importMetadata: source.importMetadata,
   };
 
   // 12. ZERO TRUST: Chạy qua Zod Schema Validation

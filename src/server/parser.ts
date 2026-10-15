@@ -11,7 +11,7 @@ export function detectDocumentType(rawText: string, standardType: string = 'stat
   const topLines = topText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   
   let docType = "CÔNG VĂN";
-  const docTypeKeywords = ["QUYẾT ĐỊNH", "KẾ HOẠCH", "TỜ TRÌNH", "THÔNG BÁO", "NGHỊ QUYẾT", "BÁO CÁO", "NGHỊ ĐỊNH", "CHỈ THỊ", "HƯỚNG DẪN", "CÔNG VĂN"];
+  const docTypeKeywords = ["QUYẾT ĐỊNH", "KẾ HOẠCH", "TỜ TRÌNH", "THÔNG BÁO", "NGHỊ QUYẾT", "BÁO CÁO", "BIÊN BẢN", "NGHỊ ĐỊNH", "CHỈ THỊ", "HƯỚNG DẪN", "CÔNG VĂN"];
   
   for (const line of topLines.slice(0, 15)) {
     const upper = line.toUpperCase();
@@ -26,6 +26,7 @@ export function detectDocumentType(rawText: string, standardType: string = 'stat
 
   if (docType === "CÔNG VĂN") {
     if (/\bKẾ HOẠCH\b/i.test(topText)) docType = "KẾ HOẠCH";
+    else if (/\bBIÊN BẢN\b/i.test(topText)) docType = "BIÊN BẢN";
     else if (/\bQUYẾT ĐỊNH\b/i.test(topText)) docType = "QUYẾT ĐỊNH";
     else if (/\bTỜ TRÌNH\b/i.test(topText)) docType = "TỜ TRÌNH";
     else if (/\bTHÔNG BÁO\b/i.test(topText)) docType = "THÔNG BÁO";
@@ -42,10 +43,28 @@ export function fallbackRuleBasedParser(rawText: string, standardType: string, r
   // 1. Structural Document Type Detection (FIX-02, E2E-01)
   const docType = detectDocumentType(rawText, standardType);
 
-  // 2. Preserve HTML structure & tables (FIX-03, FIX-04)
+  // 2. Preserve HTML structure & tables with appendix separation (P0-04, FIX-03, FIX-04)
   let htmlBody = "";
+  const appendices: any[] = [];
+
   if (rawHtml && (rawHtml.includes("<table") || rawHtml.trim().length > 0)) {
-    htmlBody = rawHtml;
+    // Check if rawHtml contains an appendix section
+    const appendixMatch = rawHtml.search(/<p[^>]*>(?:<strong>|<em>|\s)*PHỤ LỤC\b/i);
+    if (appendixMatch !== -1) {
+      htmlBody = rawHtml.slice(0, appendixMatch).trim();
+      const appendixHtml = rawHtml.slice(appendixMatch).trim();
+      appendices.push({
+        id: "appendix-1",
+        title: "PHỤ LỤC",
+        referenceText: "",
+        html: appendixHtml,
+        blocks: [],
+        sourceBlockIds: [],
+        extractionStatus: "confirmed" as const,
+      });
+    } else {
+      htmlBody = rawHtml;
+    }
   } else {
     const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     lines.forEach(line => {
@@ -83,6 +102,7 @@ export function fallbackRuleBasedParser(rawText: string, standardType: string, r
     bodyHtml: htmlBody,
     signTitle: isParty ? "T/M BAN THƯỜNG VỤ\n[CHỨC VỤ]" : "TM. ỦY BAN NHÂN DÂN\n[CHỨC VỤ]",
     signName: "[Họ và tên người ký]",
-    recipients: isParty ? "Như trên;\nLưu: VT, Ban Tổ chức." : "Như trên;\nLưu: VT, TH."
+    recipients: isParty ? "Như trên;\nLưu: VT, Ban Tổ chức." : "Như trên;\nLưu: VT, TH.",
+    appendices,
   };
 }

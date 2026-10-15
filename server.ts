@@ -93,6 +93,8 @@ async function generateContentWithModelFallback(params: { contents: any; config?
 }
 
 import { fallbackRuleBasedParser } from "./src/server/parser.ts";
+import { extractBlocksFromDocx, extractBlocksFromTxt } from "./src/server/blockExtractor.ts";
+import { segmentSourceBlocks } from "./src/server/structuralSegmenter.ts";
 
 async function startServer() {
   const app = express();
@@ -141,7 +143,7 @@ async function startServer() {
   app.use("/api/", apiLimiter);
   app.use("/api/ai/", aiLimiter);
 
-  // API to parse uploaded file (.docx, .txt)
+  // API to parse uploaded file (.docx, .txt) with structural segmentation (P0-A, P0-B)
   app.post("/api/parse-docx", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
@@ -160,31 +162,38 @@ async function startServer() {
       // If plain text or txt file
       if (ext === ".txt" || req.file.mimetype === "text/plain") {
         const textContent = req.file.buffer.toString("utf-8");
-        const escaped = textContent
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#039;");
+        const extracted = extractBlocksFromTxt(textContent);
+        const structured = segmentSourceBlocks(extracted.blocks, {
+          filename: req.file.originalname,
+          fileType: "txt"
+        });
         return res.json({
           success: true,
           text: textContent,
-          html: `<p>${escaped.replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>")}</p>`,
-          fileType: "txt"
+          html: extracted.rawHtml,
+          fileType: "txt",
+          blocks: extracted.blocks,
+          structured,
+          warnings: []
         });
       }
 
-      // Word .docx file parsed via Mammoth
+      // Word .docx file parsed via Mammoth + JSZip structural block extraction
       try {
-        const result = await mammoth.extractRawText({ buffer: req.file.buffer });
-        const htmlResult = await mammoth.convertToHtml({ buffer: req.file.buffer });
+        const extracted = await extractBlocksFromDocx(req.file.buffer);
+        const structured = segmentSourceBlocks(extracted.blocks, {
+          filename: req.file.originalname,
+          fileType: "docx"
+        });
 
         return res.json({
           success: true,
-          text: result.value,
-          html: htmlResult.value,
-          messages: result.messages,
-          fileType: "docx"
+          text: extracted.rawText,
+          html: extracted.rawHtml,
+          fileType: "docx",
+          blocks: extracted.blocks,
+          structured,
+          warnings: []
         });
       } catch (docErr: any) {
         return res.status(422).json({

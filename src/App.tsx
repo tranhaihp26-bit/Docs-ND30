@@ -16,7 +16,10 @@ import {
   type DocumentFormatType, 
   validateND30Compliance, 
   type ND30ComplianceReport,
-  isPlaceholderValue 
+  isPlaceholderValue,
+  type StructuredImport,
+  type AppendixDocument,
+  type SourceBlock
 } from "./shared/schemas/document.schema.ts";
 import { formatStandardDate, extractLocation } from "./server/middleware/compliance.middleware.ts";
 import { detectDocumentType } from "./server/parser.ts";
@@ -36,6 +39,13 @@ export interface DocumentState {
   signTitle: string;
   signName: string;
   recipients: string;
+  appendices?: AppendixDocument[];
+  unclassified?: SourceBlock[];
+  importMetadata?: {
+    sourceType?: "template" | "docx" | "txt" | "paste";
+    status?: "parsed" | "needs_review" | "confirmed";
+    sourceFilename?: string;
+  };
 }
 
 interface Version {
@@ -351,6 +361,9 @@ export default function App() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Structured Import state
+  const [structuredImport, setStructuredImport] = useState<StructuredImport | null>(null);
+
   // Compliance Inspection Modal state
   const [showComplianceModal, setShowComplianceModal] = useState(false);
   const [complianceReport, setComplianceReport] = useState<ND30ComplianceReport | null>(null);
@@ -455,7 +468,11 @@ export default function App() {
         setRawText(data.text);
         const sanitizedHtml = data.html ? DOMPurify.sanitize(data.html) : safeTextToHtml(data.text);
         setUploadedHtml(sanitizedHtml);
-        setSuccessMsg(`Đã trích xuất thành công nội dung từ tệp "${file.name}" (${data.text.length} ký tự). Bạn có thể chọn đưa trực tiếp vào Editor hoặc nhờ AI cấu trúc lại.`);
+        if (data.structured) {
+          setStructuredImport(data.structured);
+        }
+        const appCount = data.structured?.appendices?.length || 0;
+        setSuccessMsg(`Đã đọc thành công tệp "${file.name}" (${data.text.length} ký tự, ${data.blocks?.length || 0} khối, ${appCount} phụ lục). Bạn có thể kiểm tra phân vùng hoặc đưa trực tiếp vào Editor.`);
       } else {
         setErrorMsg(data.error || "Không thể đọc tệp tin đã tải lên.");
       }
@@ -481,15 +498,46 @@ export default function App() {
     return DOMPurify.sanitize(paragraphs || "<p></p>");
   };
 
-  // Direct import to editor without AI (P0-01, P0-02)
+  // Direct import to editor using structural segmentation (P0-01, P0-02, P0-B, P0-C)
   const handleDirectImportToEditor = () => {
-    if (!uploadedHtml && !rawText) {
+    if (!uploadedHtml && !rawText && !structuredImport) {
       setErrorMsg("Chưa có nội dung tệp tin để đưa vào trình soạn thảo.");
       return;
     }
+
+    if (structuredImport) {
+      const fields = structuredImport.fields;
+      const detectedType = fields.documentType?.value || detectDocumentType(rawText || uploadedHtml, standardType);
+
+      const newDoc: DocumentState = {
+        orgHeader1: fields.orgHeader1?.value || "",
+        orgHeader2: fields.orgHeader2?.value || "",
+        nationalHeader1: fields.nationalHeader1?.value || (standardType === "party" ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"),
+        nationalHeader2: fields.nationalHeader2?.value ?? (standardType === "party" ? "" : "Độc lập - Tự do - Hạnh phúc"),
+        locationAndDate: fields.locationAndDate?.value || "",
+        documentType: detectedType,
+        referenceNumber: fields.referenceNumber?.value || "",
+        subject: fields.subject?.value || (uploadedFileName ? `Trích xuất từ tệp ${uploadedFileName}` : ""),
+        bodyHtml: structuredImport.body.html || uploadedHtml,
+        signTitle: fields.signTitle?.value || "",
+        signName: fields.signName?.value || "",
+        recipients: fields.recipients?.value || "",
+        appendices: structuredImport.appendices || [],
+        unclassified: structuredImport.unclassified || [],
+        importMetadata: {
+          sourceType: "docx",
+          status: "confirmed",
+          sourceFilename: uploadedFileName,
+        }
+      };
+      setDoc(newDoc);
+      pushVersion(`Nhập phân vùng từ tệp ${uploadedFileName || "văn bản"}`, newDoc);
+      setSuccessMsg(`Đã phân tích cấu trúc và đưa tài liệu (${detectedType}) vào trình soạn thảo thành công! (${newDoc.appendices?.length || 0} phụ lục)`);
+      setActiveTab("editor");
+      return;
+    }
+
     const cleanHtml = uploadedHtml ? DOMPurify.sanitize(uploadedHtml) : safeTextToHtml(rawText);
-    
-    // Detect document type structurally from raw text or HTML using the shared parser
     const textForTypeCheck = rawText || cleanHtml.replace(/<[^>]+>/g, " ");
     const detectedType = detectDocumentType(textForTypeCheck, standardType);
 
@@ -505,7 +553,9 @@ export default function App() {
       bodyHtml: cleanHtml,
       signTitle: "",
       signName: "",
-      recipients: ""
+      recipients: "",
+      appendices: [],
+      unclassified: [],
     };
     setDoc(newDoc);
     pushVersion(`Nhập trực tiếp từ tệp ${uploadedFileName || "văn bản"}`, newDoc);
@@ -681,6 +731,8 @@ export default function App() {
         signTitle: exportDoc.signTitle,
         signName: exportDoc.signName,
         recipients: exportDoc.recipients,
+        appendices: exportDoc.appendices || [],
+        unclassified: exportDoc.unclassified || [],
       };
 
       const isDraft = isPlaceholderValue(doc.orgHeader2) || 
@@ -1330,6 +1382,123 @@ export default function App() {
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
                   />
                 </div>
+              </div>
+
+              {/* SECTION: PHỤ LỤC VĂN BẢN ĐỘC LẬP (P0-D / P0-B) */}
+              <div className="bg-amber-50/40 border border-amber-200/80 rounded-xl p-4 space-y-3 mt-4">
+                <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                      Phụ lục đính kèm độc lập ({doc.appendices?.length || 0})
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newApp: AppendixDocument = {
+                        id: `appendix-${Date.now()}`,
+                        title: `PHỤ LỤC ${(doc.appendices?.length || 0) + 1}`,
+                        referenceText: `(Kèm theo ${doc.documentType || "Văn bản"} ${doc.referenceNumber || ""})`,
+                        html: "<p>Nội dung phụ lục mới...</p>",
+                        blocks: [],
+                        sourceBlockIds: [],
+                        extractionStatus: "confirmed",
+                      };
+                      setDoc(prev => ({
+                        ...prev,
+                        appendices: [...(prev.appendices || []), newApp]
+                      }));
+                    }}
+                    className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition"
+                  >
+                    <FilePlus className="w-3.5 h-3.5" />
+                    <span>+ Thêm Phụ lục</span>
+                  </button>
+                </div>
+
+                {(!doc.appendices || doc.appendices.length === 0) ? (
+                  <p className="text-[11px] text-amber-800/80 italic py-1">
+                    Tài liệu chưa có phụ lục đính kèm. Bạn có thể nhấn "+ Thêm Phụ lục" để khởi tạo phụ lục độc lập.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {doc.appendices.map((app, idx) => (
+                      <div key={app.id || idx} className="border border-amber-200 rounded-lg p-3 bg-white space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded">
+                            PHỤ LỤC {idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDoc(prev => ({
+                                ...prev,
+                                appendices: prev.appendices?.filter((_, i) => i !== idx)
+                              }));
+                            }}
+                            className="text-[11px] text-rose-600 hover:text-rose-800 underline font-medium"
+                          >
+                            Xóa
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Tiêu đề:</label>
+                            <input
+                              type="text"
+                              value={app.title || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setDoc(prev => {
+                                  const list = [...(prev.appendices || [])];
+                                  list[idx] = { ...list[idx], title: val };
+                                  return { ...prev, appendices: list };
+                                });
+                              }}
+                              className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-semibold text-slate-800"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Dòng liên kết:</label>
+                            <input
+                              type="text"
+                              value={app.referenceText || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setDoc(prev => {
+                                  const list = [...(prev.appendices || [])];
+                                  list[idx] = { ...list[idx], referenceText: val };
+                                  return { ...prev, appendices: list };
+                                });
+                              }}
+                              className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs text-slate-800 italic"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Nội dung / Bảng HTML:</label>
+                          <textarea
+                            rows={3}
+                            value={app.html || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setDoc(prev => {
+                                const list = [...(prev.appendices || [])];
+                                list[idx] = { ...list[idx], html: val };
+                                return { ...prev, appendices: list };
+                              });
+                            }}
+                            className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-mono text-slate-800"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Bottom Actions */}

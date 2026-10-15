@@ -24,6 +24,7 @@ export interface DocumentData {
   signTitle?: string;
   signName?: string;
   regime?: "administrative" | "party";
+  appendices?: any[];
 }
 
 export interface A4DocumentPreviewProps {
@@ -326,6 +327,35 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
             <div className="h-16"></div>
             <p className="font-bold text-[11pt]">{doc.signName || "[Họ và tên]"}</p>
           </div>
+        </div>
+      )}
+
+      {/* 6. Independent Appendices Section */}
+      {doc.appendices && Array.isArray(doc.appendices) && doc.appendices.length > 0 && (
+        <div className="mt-12 pt-8 border-t border-slate-300 space-y-8">
+          {doc.appendices.map((app: any, idx: number) => (
+            <div key={app.id || idx} className="space-y-4">
+              <div className="text-center">
+                <h3 className="font-bold uppercase text-[12pt]">
+                  {app.title || `PHỤ LỤC ${idx + 1}`}
+                </h3>
+                {app.referenceText && (
+                  <p className="italic text-[11pt] mt-1">{app.referenceText}</p>
+                )}
+              </div>
+              <div
+                className="text-justify space-y-2 [&_p]:my-1.5 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-black [&_th]:p-2 [&_th]:font-bold [&_td]:border [&_td]:border-black [&_td]:p-2"
+                style={{
+                  fontSize: isParty ? "14pt" : "13pt",
+                  fontFamily: "'Times New Roman', Times, serif",
+                  lineHeight: "1.4",
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(app.html || ""),
+                }}
+              />
+            </div>
+          ))}
         </div>
       )}
     </div>
