@@ -255,6 +255,8 @@ export interface StructuredImport {
     html: string;
     sourceBlockIds: string[];
   };
+  /** Original multi-signer table, kept separately from the body region. */
+  signatureHtml?: string;
   appendices: AppendixDocument[];
   unclassified: SourceBlock[];
   order: string[];

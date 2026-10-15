@@ -267,7 +267,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
           {/* Column 1: Organization Header & Ref Number */}
           <div>
             {doc.orgHeader1 && (
-              <p className="uppercase text-[10.5pt] font-normal leading-tight">
+              <p className="uppercase text-[10.5pt] font-normal leading-tight whitespace-pre-line">
                 {doc.orgHeader1}
               </p>
             )}

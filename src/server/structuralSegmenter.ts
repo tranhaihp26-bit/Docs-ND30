@@ -177,7 +177,10 @@ export function segmentSourceBlocks(
       }
 
       if (filteredLines.length >= 2) {
-        fields.orgHeader1 = { value: filteredLines[0], confidence: "high", status: "extracted", sourceBlockIds: [blocks[0].id] };
+        // Some source DOCX files separate two parent-organization lines with
+        // alignment spaces inside a single Word paragraph instead of w:br.
+        const parentLines = filteredLines[0].split(/(?: {3,}|\t+)/).map(line => line.trim()).filter(Boolean);
+        fields.orgHeader1 = { value: parentLines.join("\n"), confidence: "high", status: "extracted", sourceBlockIds: [blocks[0].id] };
         fields.orgHeader2 = { value: filteredLines.slice(1).join("\n"), confidence: "high", status: "extracted", sourceBlockIds: [blocks[0].id] };
       } else if (filteredLines.length === 1) {
         fields.orgHeader2 = { value: filteredLines[0], confidence: "high", status: "extracted", sourceBlockIds: [blocks[0].id] };
@@ -286,7 +289,7 @@ export function segmentSourceBlocks(
         docTypeIndex = i;
         b.role = "metadata";
         fields.documentType = {
-          value: kw,
+          value: text,
           confidence: "high",
           status: "extracted",
           sourceBlockIds: [b.id],
@@ -411,6 +414,7 @@ export function segmentSourceBlocks(
   // =========================================================================
   // Search from bodyEndExclusive - 1 backwards
   let sigFoundIndex = -1;
+  let signatureHtml: string | undefined;
   for (let i = bodyEndExclusive - 1; i >= nextStartIndex; i--) {
     const b = blocks[i];
     if (b.kind === "table" && b.tableShape && b.tableShape.columns >= 2) {
@@ -429,6 +433,7 @@ export function segmentSourceBlocks(
       if ((hasRecipients && hasSign) || isMinutesSignTable || (b.tableShape.rows <= 3 && hasSign)) {
         sigFoundIndex = i;
         b.role = "signature";
+        if (isMinutesSignTable) signatureHtml = b.html || undefined;
 
         // Extract recipients and signature fields
         const leftCol = data.map(r => r[0] || "").join("\n");
@@ -504,9 +509,9 @@ export function segmentSourceBlocks(
     bodyHtmlParts.push(b.html || `<p>${b.text}</p>`);
   }
 
-  // Also check any leftover separator paragraphs between signature and appendix
-  for (let i = bodyEndExclusive; i < total; i++) {
-    const b = blocks[i];
+  // Empty source paragraphs may also occur before the title, outside the
+  // body range. They are spacing separators rather than uncertain content.
+  for (const b of blocks) {
     if (b.role === "unclassified" && b.kind === "paragraph" && !b.text.trim()) {
       b.role = "separator";
     }
@@ -536,6 +541,7 @@ export function segmentSourceBlocks(
       html: bodyHtmlParts.join(""),
       sourceBlockIds: bodyBlockIds,
     },
+    signatureHtml,
     appendices,
     unclassified: unclassifiedBlocks,
     order,

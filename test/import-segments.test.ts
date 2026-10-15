@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { segmentSourceBlocks } from "../src/server/structuralSegmenter.ts";
 import { extractBlocksFromTxt } from "../src/server/blockExtractor.ts";
+import { detectEmbeddedSignature } from "../src/utils/docxExport.ts";
+import { composeImportedBodyHtml } from "../src/utils/importReview.ts";
+import { generateND30DocxDocument } from "../src/utils/docxExport.ts";
+import { Packer } from "docx";
+import JSZip from "jszip";
 import type { SourceBlock } from "../src/shared/schemas/document.schema.ts";
 
 async function runTest(id: string, name: string, fn: () => Promise<void> | void) {
@@ -359,6 +364,54 @@ async function main() {
     const result = segmentSourceBlocks(blocks, { filename: "Tieu ngu chuan.docx", fileType: "docx" });
     assert.equal(result.fields.locationAndDate.value, "Hải Phòng, ngày … tháng … năm 2026");
     assert.equal(result.fields.locationAndDate.status, "ambiguous");
+  });
+
+  await runTest("SEP-18", "Tách hai dòng cơ quan cấp trên khi Word dùng khoảng trắng và bỏ qua đoạn trống", () => {
+    const blocks: SourceBlock[] = [
+      {
+        id: "header", index: 0, kind: "table", role: "unclassified",
+        text: "Tiêu ngữ hai cột", tableShape: { rows: 1, columns: 2 },
+        tableData: [[
+          "TỔNG CÔNG TY BẢO ĐẢM                                        AN TOÀN HÀNG HẢI VIỆT NAM\nCÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC\nSố: 01/HTMB",
+          "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc",
+        ]],
+      },
+      { id: "blank", index: 1, kind: "paragraph", text: "", html: "<p></p>", role: "unclassified" },
+      { id: "title", index: 2, kind: "paragraph", text: "BIÊN BẢN", html: "<p>BIÊN BẢN</p>", role: "unclassified" },
+      { id: "body", index: 3, kind: "paragraph", text: "Nội dung làm việc", html: "<p>Nội dung làm việc</p>", role: "unclassified" },
+    ];
+    const result = segmentSourceBlocks(blocks, { filename: "sample.docx", fileType: "docx" });
+    assert.equal(result.fields.orgHeader1.value, "TỔNG CÔNG TY BẢO ĐẢM\nAN TOÀN HÀNG HẢI VIỆT NAM");
+    assert.equal(result.fields.orgHeader2.value, "CÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC");
+    assert.equal(result.unclassified.length, 0);
+  });
+
+  await runTest("SEP-19", "Giữ nguyên tiêu đề biên bản và cả bảng ký ba người khi nhập", async () => {
+    const blocks: SourceBlock[] = [
+      { id: "title", index: 0, kind: "paragraph", text: "BIÊN BẢN LÀM VIỆC VỚI CÁN BỘ", html: "<p>BIÊN BẢN LÀM VIỆC VỚI CÁN BỘ</p>", role: "unclassified" },
+      { id: "subject", index: 1, kind: "paragraph", text: "Về việc trao đổi công việc", html: "<p>Về việc trao đổi công việc</p>", role: "unclassified" },
+      { id: "body", index: 2, kind: "paragraph", text: "Nội dung cuộc họp", html: "<p>Nội dung cuộc họp</p>", role: "unclassified" },
+      { id: "sign", index: 3, kind: "table", role: "unclassified", text: "ĐẠI DIỆN | CÁN BỘ | THƯ KÝ", tableShape: { rows: 1, columns: 3 },
+        tableData: [["ĐẠI DIỆN\nNguyễn Văn Bình", "CÁN BỘ\nTrần Văn An", "THƯ KÝ\nLê Thị Lan"]],
+        html: "<table><tr><td>ĐẠI DIỆN<br/>Nguyễn Văn Bình</td><td>CÁN BỘ<br/>Trần Văn An</td><td>THƯ KÝ<br/>Lê Thị Lan</td></tr></table>" },
+    ];
+    const result = segmentSourceBlocks(blocks, { filename: "sample.docx", fileType: "docx" });
+    assert.equal(result.fields.documentType.value, "BIÊN BẢN LÀM VIỆC VỚI CÁN BỘ");
+    assert.ok(result.signatureHtml?.includes("Nguyễn Văn Bình"));
+    assert.ok(result.signatureHtml?.includes("Trần Văn An"));
+    assert.ok(result.signatureHtml?.includes("Lê Thị Lan"));
+    const importedBodyHtml = composeImportedBodyHtml(result);
+    assert.equal(detectEmbeddedSignature(importedBodyHtml), true);
+    const docx = generateND30DocxDocument({
+      regime: "administrative", headerProfile: "generic", nationalHeader1: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      nationalHeader2: "Độc lập - Tự do - Hạnh phúc", fontFamily: "Times New Roman", fontSize: 13,
+      orgHeader1: "", orgHeader2: "CƠ QUAN THỬ NGHIỆM", locationAndDate: "Hà Nội, ngày 15 tháng 10 năm 2026",
+      documentType: "BIÊN BẢN LÀM VIỆC VỚI CÁN BỘ", referenceNumber: "Số: 01/BB", subject: "Về việc trao đổi công việc",
+      bodyHtml: importedBodyHtml, signTitle: "THƯ KÝ", signName: "Lê Thị Lan", recipients: "",
+    });
+    const zip = await JSZip.loadAsync(await Packer.toBuffer(docx));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    assert.equal((xml.match(/<w:tbl>/g) || []).length, 2, "Header và bảng ký phải là hai bảng Word riêng");
   });
 
   console.log("\n==================================================================");

@@ -1,5 +1,11 @@
 import type { StructuredImport } from "../shared/schemas/document.schema.ts";
 
+export function composeImportedBodyHtml(source: StructuredImport): string {
+  // Keep an imported multi-signer table as a top-level table. Wrapping it in
+  // a div makes the DOCX converter flatten its three columns into paragraphs.
+  return source.body.html + (source.signatureHtml || "");
+}
+
 export function updateImportField(source: StructuredImport, field: string, value: string): StructuredImport {
   const previous = source.fields[field];
   if (!previous) return source;

@@ -463,6 +463,14 @@ function parseInlineNodes(element: Element, fontSizeHalfPoints: number = 26): Te
 export function detectEmbeddedSignature(bodyHtml: string): boolean {
   if (!bodyHtml || typeof bodyHtml !== "string") return false;
 
+  const tables = bodyHtml.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi) || [];
+  if (tables.some(table => {
+    const firstRow = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/i)?.[0] || "";
+    const cells = firstRow.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) || [];
+    return cells.length >= 3 && cells.some(cell => /THƯ KÝ/i.test(cell)) &&
+      cells.some(cell => /(ĐẠI DIỆN|CHỦ TỌA|CÁN BỘ)/i.test(cell));
+  })) return true;
+
   const hasRecipients = /NƠI NHẬN\s*:/i.test(bodyHtml);
   const hasFormula = /\b(TM\.|T\/M\.|KT\.|TL\.|TUQ\.)\b/i.test(bodyHtml);
 

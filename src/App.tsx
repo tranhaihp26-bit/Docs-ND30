@@ -13,7 +13,7 @@ import ND30Editor from "./components/ND30Editor.tsx";
 import { A4DocumentPreview } from "./components/A4DocumentPreview.tsx";
 import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
 import { parseLocalFile } from "./utils/localFileImport.ts";
-import { deriveImportStatus, updateImportField } from "./utils/importReview.ts";
+import { composeImportedBodyHtml, deriveImportStatus, updateImportField } from "./utils/importReview.ts";
 import { 
   type DocumentFormatType, 
   validateND30Compliance, 
@@ -25,7 +25,7 @@ import {
 } from "./shared/schemas/document.schema.ts";
 import { formatStandardDate, extractLocation } from "./server/middleware/compliance.middleware.ts";
 import { detectDocumentType } from "./server/parser.ts";
-import { COMPANY_HEADER_PROFILE_ID, applyCompanyProfile, LOCKED_COMPANY_FIELDS } from "./canonical/nd30/companyHeader.ts";
+import { COMPANY_HEADER_PROFILE_ID, COMPANY_HEADER_PARENT_LINES, applyCompanyProfile, LOCKED_COMPANY_FIELDS } from "./canonical/nd30/companyHeader.ts";
 
 export interface DocumentState {
   headerProfile?: "generic" | typeof COMPANY_HEADER_PROFILE_ID;
@@ -572,7 +572,7 @@ export default function App() {
         documentType: detectedType,
         referenceNumber: fields.referenceNumber?.value || "",
         subject: fields.subject?.value || "",
-        bodyHtml: structuredImport.body.html,
+        bodyHtml: composeImportedBodyHtml(structuredImport),
         signTitle: fields.signTitle?.value || "",
         signName: fields.signName?.value || "",
         recipients: fields.recipients?.value || "",
@@ -1135,14 +1135,14 @@ export default function App() {
                                 <span className={`ml-2 text-[10px] ${field?.status === "missing" || field?.status === "ambiguous" ? "text-amber-700" : "text-emerald-700"}`}>
                                   {field?.status === "missing" ? "Chưa tìm thấy" : field?.status === "ambiguous" ? "Cần kiểm tra" : field?.status === "user_confirmed" ? "Đã sửa" : `Trích xuất (${field?.confidence || "?"})`}
                                 </span>
-                                <input
-                                  type="text"
+                                <textarea
+                                  rows={key === "orgHeader1" || (field?.value || "").includes("\n") ? 2 : 1}
                                   value={field?.value || ""}
                                   onChange={(e) => {
                                     setStructuredImport(prev => prev ? updateImportField(prev, key, e.target.value) : prev);
                                     setImportReviewAccepted(false);
                                   }}
-                                  className="mt-1 w-full border border-slate-300 rounded px-2 py-1.5 text-slate-900"
+                                  className="mt-1 w-full min-h-9 resize-y border border-slate-300 rounded px-2 py-1.5 text-slate-900 whitespace-pre-wrap"
                                 />
                               </label>
                             );
@@ -1150,6 +1150,7 @@ export default function App() {
                         </div>
                         <div className="border-t border-slate-200 pt-2 space-y-1 text-slate-700">
                           <p><strong>Nội dung chính:</strong> {structuredImport.body.sourceBlockIds.length} khối</p>
+                          {structuredImport.signatureHtml && <p><strong>Bảng ký nhiều người:</strong> Đã giữ nguyên bảng từ tệp gốc để đưa vào trình soạn thảo và bản xuất.</p>}
                           <p className="max-h-24 overflow-auto whitespace-pre-wrap break-words bg-slate-50 p-2 rounded">{structuredImport.body.html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 800) || "(Trống)"}</p>
                           <p><strong>Phụ lục:</strong> {structuredImport.appendices.length}</p>
                           {structuredImport.appendices.map((appendix, index) => (
@@ -1337,13 +1338,13 @@ export default function App() {
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     Cơ quan chủ quản cấp trên (nếu có):
                   </label>
-                  <input
-                    type="text"
-                    value={doc.orgHeader1}
+                  <textarea
+                    rows={2}
+                    value={standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID ? COMPANY_HEADER_PARENT_LINES.join("\n") : doc.orgHeader1}
                     onChange={(e) => handleFieldChange("orgHeader1", e.target.value.toUpperCase())}
                     readOnly={standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID}
                     placeholder="VD: BỘ TƯ PHÁP / UBND THÀNH PHỐ"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 resize-y"
                   />
                 </div>
                 <div>
