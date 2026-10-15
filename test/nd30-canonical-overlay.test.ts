@@ -4,7 +4,7 @@ import { Packer } from 'docx';
 import { auditCanonicalND30, auditGeneratedDocx } from '../src/canonical/nd30/canonicalAudit.ts';
 import {
   COMPANY_HEADER_GEOMETRY_MM, COMPANY_HEADER_PARENT, COMPANY_HEADER_ISSUER,
-  COMPANY_HEADER_PROFILE_ID, applyCompanyProfile,
+  COMPANY_HEADER_PROFILE_ID, applyCompanyProfile, matchesCompanyHeader,
 } from '../src/canonical/nd30/companyHeader.ts';
 import { generateND30DocxDocument } from '../src/utils/docxExport.ts';
 
@@ -62,6 +62,11 @@ assert.ok(assessed.counts.PASS+assessed.counts.FAIL+assessed.counts.NOT_EVALUATE
 
 const imported = {regime:'administrative',orgHeader1:'OTHER',orgHeader2:'OTHER',headerProfile:'generic'};
 assert.equal(imported.headerProfile,'generic','Imported documents must not inherit fixed company header');
+assert.equal(matchesCompanyHeader('TỔNG CÔNG TY BẢO ĐẢM\nAN TOÀN HÀNG HẢI VIỆT NAM', COMPANY_HEADER_ISSUER), true,
+  'A matching imported company document must use the visual company profile');
+assert.equal(matchesCompanyHeader('TỔNG CÔNG TY BẢO ĐẢM  AN TOÀN HÀNG HẢI VIỆT NAM', COMPANY_HEADER_ISSUER), true);
+assert.equal(matchesCompanyHeader('OTHER', COMPANY_HEADER_ISSUER), false);
+assert.equal(matchesCompanyHeader(COMPANY_HEADER_PARENT, 'OTHER'), false);
 assert.equal(doc.headerProfile,COMPANY_HEADER_PROFILE_ID);
 
 console.log(`[CANONICAL] 435 verified rules loaded; PASS=${assessed.counts.PASS}, NOT_EVALUATED=${assessed.counts.NOT_EVALUATED}.`);

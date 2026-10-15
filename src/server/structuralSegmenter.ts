@@ -111,7 +111,9 @@ export function segmentSourceBlocks(
         filename: options.filename || "untitled",
         type: options.fileType || "docx",
         blockCount: 0,
+        detectedRegime: "unknown",
       },
+      blocks: [],
       fields,
       body: { html: "", sourceBlockIds: [] },
       appendices: [],
@@ -133,10 +135,9 @@ export function segmentSourceBlocks(
     const rightText = (firstRow[1] || "").trim();
 
     // Check if table looks like administrative header
-    const hasNational = NATIONAL_HEADER_1_REGEX.test(rightText) || NATIONAL_HEADER_2_REGEX.test(rightText);
-    const hasOrgOrRef = leftText.length > 0 || REF_NUMBER_REGEX.test(leftText);
+    const hasNational = NATIONAL_HEADER_1_REGEX.test(rightText);
 
-    if (hasNational || hasOrgOrRef) {
+    if (hasNational) {
       blocks[0].role = "header";
       headerBlockIds.push(blocks[0].id);
       nextStartIndex = 1;
@@ -189,6 +190,24 @@ export function segmentSourceBlocks(
   } else {
     // Header in top paragraphs
     let pIdx = 0;
+    const nationalIndex = blocks.findIndex((block, index) => index < 6 && block.kind === "paragraph" && NATIONAL_HEADER_1_REGEX.test(block.text));
+    if (nationalIndex > 0 && nationalIndex <= 3) {
+      const issuerLines = blocks.slice(0, nationalIndex);
+      const credibleIssuer = issuerLines.every(block => block.kind === "paragraph" &&
+        block.text.trim().length > 2 && block.text.trim().length < 180 &&
+        block.text.trim() === block.text.trim().toLocaleUpperCase("vi-VN") &&
+        !REF_NUMBER_REGEX.test(block.text) && !DATE_LOCATION_REGEX.test(block.text));
+      if (credibleIssuer) {
+        const issuer = issuerLines[issuerLines.length - 1];
+        fields.orgHeader2 = { value: issuer.text.trim(), confidence: "medium", status: "extracted", sourceBlockIds: [issuer.id] };
+        if (issuerLines.length > 1) {
+          fields.orgHeader1 = { value: issuerLines.slice(0, -1).map(block => block.text.trim()).join("\n"), confidence: "medium", status: "extracted", sourceBlockIds: issuerLines.slice(0, -1).map(block => block.id) };
+        }
+        issuerLines.forEach(block => { block.role = "header"; headerBlockIds.push(block.id); });
+        pIdx = nationalIndex;
+        nextStartIndex = nationalIndex;
+      }
+    }
     while (pIdx < Math.min(total, 6)) {
       const b = blocks[pIdx];
       if (b.kind !== "paragraph") break;
@@ -529,13 +548,20 @@ export function segmentSourceBlocks(
   });
 
   const order = blocks.map(b => b.id);
+  const sourceHeading = blocks.slice(0, Math.min(total, 6)).map(b => b.text).join("\n");
+  const hasPartyHeading = /ĐẢNG CỘNG SẢN VIỆT NAM/i.test(sourceHeading);
+  const hasAdministrativeHeading = /CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM/i.test(sourceHeading);
+  const detectedRegime = hasPartyHeading === hasAdministrativeHeading
+    ? "unknown" as const : hasPartyHeading ? "party" as const : "administrative" as const;
 
   return {
     source: {
       filename: options.filename || "untitled",
       type: options.fileType || "docx",
       blockCount: total,
+      detectedRegime,
     },
+    blocks,
     fields,
     body: {
       html: bodyHtmlParts.join(""),

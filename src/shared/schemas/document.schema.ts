@@ -249,7 +249,10 @@ export interface StructuredImport {
     filename: string;
     type: "docx" | "txt";
     blockCount: number;
+    detectedRegime?: "administrative" | "party" | "unknown";
   };
+  /** All extracted source blocks in document order, including separators. */
+  blocks?: SourceBlock[];
   fields: Record<string, ExtractedField<string>>;
   body: {
     html: string;

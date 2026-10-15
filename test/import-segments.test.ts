@@ -414,6 +414,47 @@ async function main() {
     assert.equal((xml.match(/<w:tbl>/g) || []).length, 2, "Header và bảng ký phải là hai bảng Word riêng");
   });
 
+  await runTest("SEP-20", "Bảng hai cột đầu tài liệu không có quốc hiệu vẫn là bảng nội dung", () => {
+    const blocks: SourceBlock[] = [
+      { id: "table", index: 0, kind: "table", text: "Hạng mục | Kết quả", html: "<table><tr><td>Hạng mục</td><td>Kết quả</td></tr></table>", tableShape: { rows: 1, columns: 2 }, tableData: [["Hạng mục", "Kết quả"]] },
+      { id: "tail", index: 1, kind: "paragraph", text: "Nội dung cuối", html: "<p>Nội dung cuối</p>" },
+    ];
+    const result = segmentSourceBlocks(blocks, { filename: "bang.docx", fileType: "docx" });
+    assert.equal(result.body.sourceBlockIds[0], "table");
+    assert.equal(result.fields.orgHeader2.value, null);
+    assert.equal(result.blocks?.[0].role, "body");
+    assert.equal(result.source.detectedRegime, "unknown");
+  });
+
+  await runTest("SEP-21", "Nhận diện chế độ từ quốc hiệu hoặc Đảng hiệu trong nguồn", () => {
+    const admin = segmentSourceBlocks([{ id: "a", index: 0, kind: "paragraph", text: "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM" }], { fileType: "txt" });
+    const party = segmentSourceBlocks([{ id: "p", index: 0, kind: "paragraph", text: "ĐẢNG CỘNG SẢN VIỆT NAM" }], { fileType: "txt" });
+    assert.equal(admin.source.detectedRegime, "administrative");
+    assert.equal(party.source.detectedRegime, "party");
+    assert.equal(party.fields.nationalHeader2.value, null);
+    assert.equal(admin.blocks?.length, 1);
+  });
+
+  await runTest("SEP-22", "TXT có hai dòng cơ quan trước quốc hiệu được đưa vào các trường phần đầu", () => {
+    const text = [
+      "TỔNG CÔNG TY BẢO ĐẢM AN TOÀN HÀNG HẢI VIỆT NAM",
+      "CÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC",
+      "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+      "Độc lập - Tự do - Hạnh phúc",
+      "Số: 12/BB-HTMB",
+      "Hải Phòng, ngày 15 tháng 10 năm 2026",
+      "BIÊN BẢN",
+      "Về việc kiểm tra quy trình thử nghiệm",
+      "Nội dung thử nghiệm",
+    ].join("\n");
+    const result = segmentSourceBlocks(extractBlocksFromTxt(text).blocks, { fileType: "txt" });
+    assert.equal(result.fields.orgHeader1.value, "TỔNG CÔNG TY BẢO ĐẢM AN TOÀN HÀNG HẢI VIỆT NAM");
+    assert.equal(result.fields.orgHeader2.value, "CÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC");
+    assert.equal(result.fields.nationalHeader1.value, "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM");
+    assert.equal(result.fields.locationAndDate.value, "Hải Phòng, ngày 15 tháng 10 năm 2026");
+    assert.equal(result.unclassified.length, 0);
+  });
+
   console.log("\n==================================================================");
   console.log(" ĐÃ CHẠY CÁC KIỂM THỬ PHÂN VÙNG CẤU TRÚC");
   console.log("==================================================================\n");

@@ -15,6 +15,13 @@ export const COMPANY_HEADER_ISSUER = COMPANY_HEADER_ISSUER_LINES.join(" ");
 export const COMPANY_NATIONAL_HEADER = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
 export const COMPANY_MOTTO = "Độc lập - Tự do - Hạnh phúc";
 
+/** Match only the named company; whitespace from DOCX table cells is not significant. */
+export function matchesCompanyHeader(parent: string | null | undefined, issuer: string | null | undefined): boolean {
+  const normalize = (value: string | null | undefined) => (value || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("vi-VN");
+  return normalize(parent) === normalize(COMPANY_HEADER_PARENT)
+    && normalize(issuer) === normalize(COMPANY_HEADER_ISSUER);
+}
+
 // Measured from the source Word table: 5187 + 5245 twips, indented -874 twips.
 // Its wider footprint is deliberate: both 12 pt bold headings stay on one line
 // while the table remains inside the physical A4 page.
