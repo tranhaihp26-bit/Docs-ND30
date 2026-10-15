@@ -8,26 +8,9 @@ import {
   RefreshCw, Eye, Sparkles, LayoutGrid
 } from "lucide-react";
 import { detectEmbeddedSignature, generateND30DocxDocument } from "../utils/docxExport";
-import { enforceND30Standards } from "../server/middleware/compliance.middleware";
-import type { SourceBlock } from "../shared/schemas/document.schema.ts";
+import { preparePreviewDocument, type PreviewDocumentSource } from "../utils/previewDocument.ts";
 
-export interface DocumentData {
-  orgHeader1?: string;
-  orgHeader2?: string;
-  referenceNumber?: string;
-  nationalHeader1?: string;
-  nationalHeader2?: string;
-  locationAndDate?: string;
-  documentType?: string;
-  subject?: string;
-  bodyHtml?: string;
-  recipients?: string;
-  signTitle?: string;
-  signName?: string;
-  regime?: "administrative" | "party";
-  appendices?: any[];
-  unclassified?: SourceBlock[];
-}
+export type DocumentData = PreviewDocumentSource;
 
 export interface A4DocumentPreviewProps {
   doc: DocumentData;
@@ -117,7 +100,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
 
       try {
         setIsRenderingDocx(true);
-        const normalizedDoc = enforceND30Standards(doc, isParty ? "party" : "administrative");
+        const normalizedDoc = preparePreviewDocument(doc, isParty ? "party" : "administrative");
         const docxDoc = generateND30DocxDocument(normalizedDoc);
         const blob = await Packer.toBlob(docxDoc);
 
@@ -158,7 +141,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
     let isMounted = true;
     const renderModalDocx = async () => {
       try {
-        const normalizedDoc = enforceND30Standards(doc, isParty ? "party" : "administrative");
+        const normalizedDoc = preparePreviewDocument(doc, isParty ? "party" : "administrative");
         const docxDoc = generateND30DocxDocument(normalizedDoc);
         const blob = await Packer.toBlob(docxDoc);
         if (!isMounted || !modalDocxContainerRef.current) return;
