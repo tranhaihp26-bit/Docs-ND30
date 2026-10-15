@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Docs-ND30 — Bản phác thảo giao diện</title>
+  <style>
+    :root { --ink:#101828; --muted:#475467; --blue:#175cd3; --blue-soft:#eff8ff; --green:#067647; --green-soft:#ecfdf3; --amber:#b54708; --amber-soft:#fffaeb; --red:#b42318; --line:#d0d5dd; --field:#8a94a6; --bg:#f8fafc; --paper:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--bg); font:16px/1.5 "Segoe UI",Arial,sans-serif; }
+    button { font:inherit; cursor:pointer; }
+    .prototype { background:#172b4d; color:white; padding:6px 20px; text-align:center; font-size:12px; letter-spacing:.04em; }
+    .top { background:white; border-bottom:1px solid var(--line); padding:14px 24px; display:flex; align-items:center; gap:16px; min-height:70px; }
+    .mark { background:var(--blue); color:white; width:38px; height:38px; border-radius:10px; display:grid; place-items:center; font-size:20px; font-weight:700; flex:none; }
+    .brand { min-width:0; }
+    .brand strong { display:block; font-size:17px; line-height:1.2; }
+    .brand small { color:var(--muted); font-size:12px; }
+    .head-spacer { flex:1; }
+    .status { color:var(--green); background:var(--green-soft); border:1px solid #a6e5c4; padding:6px 10px; border-radius:100px; font-size:13px; font-weight:650; white-space:nowrap; }
+    .utility { background:white; border:1px solid var(--line); color:var(--muted); border-radius:9px; padding:8px 12px; font-weight:600; font-size:13px; white-space:nowrap; }
+    .utility:hover,.utility:focus-visible { border-color:var(--blue); color:var(--blue); }
+    .nav { background:white; border-bottom:1px solid var(--line); padding:0 24px; display:flex; align-items:center; gap:4px; min-height:50px; }
+    .nav button { background:transparent; border:0; border-bottom:3px solid transparent; padding:12px 16px 10px; color:var(--muted); font-weight:650; font-size:14px; }
+    .nav button.active { color:var(--blue); border-color:var(--blue); }
+    .nav .nav-note { margin-left:auto; color:var(--muted); font-size:12px; }
+    main { max-width:1480px; margin:auto; padding:24px; }
+    .view { display:none; }
+    .view.active { display:block; }
+    .page-title { font-size:26px; line-height:1.25; letter-spacing:-.02em; margin:0 0 6px; }
+    .intro { color:var(--muted); margin:0 0 24px; }
+    .card { background:white; border:1px solid var(--line); border-radius:14px; box-shadow:0 2px 8px #10182808; }
+    .start-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    .start-card { padding:24px; min-height:205px; display:flex; flex-direction:column; align-items:flex-start; }
+    .start-card .glyph { display:grid; place-items:center; width:44px; height:44px; border-radius:11px; background:var(--blue-soft); color:var(--blue); font-size:23px; margin-bottom:12px; }
+    .start-card h2 { font-size:18px; margin:0 0 6px; }
+    .start-card p { color:var(--muted); font-size:14px; margin:0 0 18px; }
+    .start-card button { margin-top:auto; }
+    .primary { background:var(--blue); color:white; border:1px solid var(--blue); border-radius:9px; padding:10px 16px; min-height:42px; font-weight:700; }
+    .secondary { background:white; color:var(--blue); border:1px solid var(--blue); border-radius:9px; padding:10px 16px; min-height:42px; font-weight:700; }
+    .text-button { background:transparent; border:0; color:var(--blue); padding:8px; font-weight:700; }
+    .draft-card { margin-top:20px; padding:18px 22px; display:flex; gap:16px; align-items:center; }
+    .draft-card .draft-main { flex:1; }
+    .draft-card strong { display:block; }
+    .draft-card small { color:var(--muted); }
+    .sourcebar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:12px 16px; margin-bottom:16px; }
+    .sourcebar strong { font-size:14px; }
+    .sourcebar .source-file { color:var(--muted); font-size:13px; }
+    .sourcebar .right { margin-left:auto; }
+    .pill { display:inline-flex; align-items:center; gap:4px; border-radius:100px; padding:5px 9px; font-size:12px; font-weight:700; background:var(--amber-soft); color:var(--amber); border:1px solid #f7d59c; white-space:nowrap; }
+    .pill.blue { background:var(--blue-soft); color:var(--blue); border-color:#bbd7ff; }
+    .pill.green { background:var(--green-soft); color:var(--green); border-color:#a6e5c4; }
+    .workspace { display:grid; grid-template-columns:204px minmax(0,1fr); gap:16px; align-items:start; }
+    .side { padding:16px 10px; position:sticky; top:16px; }
+    .side h2,.issues h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:2px 10px 12px; }
+    .side button { display:flex; align-items:center; width:100%; gap:8px; padding:11px 10px; border:0; background:white; text-align:left; color:var(--ink); border-radius:8px; font-weight:600; font-size:14px; }
+    .side button.current { background:var(--blue-soft); color:var(--blue); }
+    .count { margin-left:auto; min-width:22px; height:22px; display:grid; place-items:center; background:var(--amber-soft); color:var(--amber); border-radius:100px; font-size:11px; }
+    .count.zero { background:#f2f4f7; color:var(--muted); }
+    .editor { overflow:hidden; }
+    .editor-head { padding:17px 20px; border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .editor-head h2 { font-size:18px; margin:0; }
+    .editor-head .helper { margin-left:auto; font-size:12px; color:var(--muted); }
+    .editor-content { padding:22px; }
+    .section-label { color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-size:12px; font-weight:700; margin:0 0 14px; }
+    .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .field label { display:block; font-size:14px; font-weight:650; margin-bottom:5px; }
+    .input { min-height:43px; border:1px solid var(--field); border-radius:8px; padding:10px 12px; background:white; font-size:15px; }
+    .input.readonly { background:#f2f4f7; color:#344054; }
+    .field.full { grid-column:1/-1; }
+    .toolbar { display:flex; gap:4px; align-items:center; flex-wrap:wrap; padding:8px; background:#f9fafb; border:1px solid var(--line); border-bottom:0; border-radius:9px 9px 0 0; margin-top:24px; }
+    .tool { background:white; border:1px solid var(--line); border-radius:6px; min-width:38px; min-height:36px; padding:5px 9px; color:var(--ink); font-size:14px; font-weight:650; }
+    .tool.more { margin-left:auto; }
+    .paper-editor { border:1px solid var(--line); border-radius:0 0 9px 9px; min-height:270px; background:white; padding:22px 28px; font:16px/1.55 "Times New Roman",serif; }
+    .paper-editor p { margin:0 0 10px; }
+    .editor-footer { border-top:1px solid var(--line); background:#f9fafb; padding:15px 20px; display:flex; gap:12px; align-items:center; }
+    .editor-footer span { color:var(--green); font-size:13px; }
+    .editor-footer button { margin-left:auto; }
+    .issues { display:none; padding:16px; position:sticky; top:16px; }
+    .issues h2 { margin-left:0; }
+    .issues .description { color:var(--muted); font-size:13px; margin:0 0 13px; }
+    .issue { border:1px solid #f7d59c; background:var(--amber-soft); border-radius:9px; padding:12px; margin-bottom:10px; }
+    .issue strong { display:block; font-size:14px; }
+    .issue p { color:#6e3300; font-size:13px; margin:5px 0; }
+    .issue button { color:var(--blue); padding:4px 0; background:none; border:0; font-weight:700; font-size:13px; }
+    .issue.done { border-color:#a6e5c4; background:var(--green-soft); }
+    .issue.done p { color:var(--green); }
+    .preview-layout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:16px; }
+    .preview-main { padding:16px; min-width:0; }
+    .preview-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding-bottom:14px; }
+    .preview-toolbar h2 { margin:0 auto 0 0; font-size:18px; }
+    .preview-stage { background:#e5eaf0; border-radius:10px; padding:22px; min-height:600px; display:flex; justify-content:center; overflow:auto; }
+    .sheet { width:595px; min-height:842px; background:white; box-shadow:0 8px 24px #10182825; padding:62px 55px; font:14px/1.35 "Times New Roman",serif; color:#111; }
+    .sheet-header { display:grid; grid-template-columns:1fr 1fr; gap:15px; text-align:center; line-height:1.15; }
+    .sheet-header strong { display:block; }
+    .sheet .meta { display:flex; justify-content:space-between; margin-top:20px; font-style:italic; }
+    .sheet h3 { text-align:center; font-size:16px; margin:42px 0 2px; }
+    .sheet .subject { text-align:center; font-style:italic; font-weight:bold; margin:0 0 24px; }
+    .sheet .sign { display:grid; grid-template-columns:1fr 1fr; margin-top:48px; text-align:center; }
+    .export { padding:18px; height:max-content; position:sticky; top:16px; }
+    .export h2 { margin:0 0 8px; font-size:18px; }
+    .export p { font-size:14px; color:var(--muted); margin:0 0 14px; }
+    .export .line { padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
+    .export .actions { margin-top:20px; display:grid; gap:9px; }
+    .export .actions button { width:100%; }
+    .history-cover { position:fixed; inset:0; background:#10182866; display:none; z-index:10; }
+    .history-cover.open { display:block; }
+    .history-drawer { position:absolute; right:0; top:0; bottom:0; background:white; width:min(420px,100%); padding:24px; overflow:auto; box-shadow:-10px 0 30px #10182820; }
+    .history-drawer h2 { margin:0 0 4px; }
+    .history-drawer p { color:var(--muted); margin:0 0 22px; font-size:14px; }
+    .history-item { padding:14px; border:1px solid var(--line); border-radius:9px; margin:10px 0; }
+    .history-item strong { display:block; font-size:14px; }
+    .history-item small { color:var(--muted); }
+    .history-drawer .close { float:right; }
+    .mobile-preview-action { display:none; }
+    :focus-visible { outline:3px solid #84caff; outline-offset:2px; }
+    @media(min-width:1440px) { .workspace { grid-template-columns:204px minmax(0,1fr) 286px; } .issues { display:block; } .review-trigger { display:none; } }
+    @media(max-width:1099px) { .preview-layout { grid-template-columns:minmax(0,1fr); } .export { position:static; } }
+    @media(max-width:767px) { main { padding:14px; } .top { padding:10px 14px; flex-wrap:wrap; } .brand small { display:none; } .head-spacer { display:none; } .top .status { margin-left:auto; } .top .utility.help { display:none; } .nav { padding:0 8px; } .nav button { flex:1; padding:10px 5px; font-size:13px; } .nav .nav-note { display:none; } .page-title { font-size:22px; } .start-grid { grid-template-columns:1fr; gap:9px; } .start-card { min-height:0; padding:14px; display:grid; grid-template-columns:42px minmax(0,1fr); column-gap:12px; align-items:center; } .start-card .glyph { grid-row:1/4; width:42px; height:42px; margin:0; } .start-card h2 { grid-column:2; margin:0; } .start-card p { grid-column:2; margin:2px 0 7px; } .start-card button { grid-column:2; justify-self:start; margin:0; } .draft-card { flex-wrap:wrap; } .workspace { grid-template-columns:minmax(0,1fr); } .side { display:none; } .field-grid { grid-template-columns:1fr; } .field.full { grid-column:auto; } .editor-content { padding:16px; } .editor-head { padding:14px 16px; } .editor-footer { flex-wrap:wrap; } .editor-footer button { width:100%; margin:0; } .preview-stage { min-height:470px; padding:12px; } .sheet { flex:none; zoom:.68; } .sourcebar .right { margin-left:0; } body[data-view=preview] .mobile-preview-action { display:flex; position:fixed; bottom:0; left:0; right:0; z-index:5; padding:9px 14px; background:white; border-top:1px solid var(--line); align-items:center; gap:10px; box-shadow:0 -3px 14px #10182813; } .mobile-preview-action span { flex:1; font-size:12px; color:var(--amber); font-weight:700; } .mobile-preview-action .primary { font-size:13px; } }
+    @media(max-width:430px) { .sheet { zoom:.48; } .status { font-size:12px; } .utility { padding:7px 9px; } .top .utility:not(.help) { font-size:0; width:38px; height:38px; padding:0; } .top .utility:not(.help)::before { content:'◷'; font-size:18px; } }
+  </style>
+</head>
+<body>
+  <div class="prototype">BẢN PHÁC THẢO GIAO DIỆN · DỮ LIỆU MINH HỌA · KHÔNG XỬ LÝ TỆP HAY XUẤT VĂN BẢN</div>
+  <header class="top">
+    <div class="mark">D</div>
+    <div class="brand"><strong>Docs-ND30</strong><small>Văn bản nội bộ · Công ty Hoa tiêu Hàng hải miền Bắc</small></div>
+    <span class="head-spacer"></span>
+    <span class="status">● Đã lưu lúc 10:24</span>
+    <button class="utility" id="historyOpen">Lịch sử</button>
+    <button class="utility help">Trợ giúp</button>
+  </header>
+  <nav class="nav" aria-label="Điều hướng chính">
+    <button data-view="work" class="active">1. Soạn thảo &amp; đối chiếu</button>
+    <button data-view="preview">2. Xem trước &amp; xuất</button>
+    <span class="nav-note">Không bắt buộc dùng AI</span>
+  </nav>
+  <main>
+    <section class="view" id="start">
+      <h1 class="page-title">Bắt đầu văn bản</h1>
+      <p class="intro">Chọn một cách để bắt đầu. Tài liệu sẽ mở ngay trong không gian soạn thảo.</p>
+      <div class="start-grid">
+        <div class="card start-card"><div class="glyph">↑</div><h2>Tải tài liệu</h2><p>Đọc DOCX hoặc TXT và đưa nội dung vào trình soạn thảo.</p><button class="primary" data-view="work">Tải DOCX/TXT</button></div>
+        <div class="card start-card"><div class="glyph">▤</div><h2>Chọn mẫu</h2><p>Mở thư viện mẫu NĐ 30 hoặc HD 05 theo loại văn bản.</p><button class="secondary" data-view="work">Xem các mẫu</button></div>
+        <div class="card start-card"><div class="glyph">✎</div><h2>Dán văn bản</h2><p>Dán nội dung sẵn có để chỉnh sửa trực tiếp, không cần AI.</p><button class="secondary" data-view="work">Dán nội dung</button></div>
+      </div>
+      <div class="card draft-card"><div class="draft-main"><strong>Tiếp tục bản nháp gần đây</strong><small>Biên bản kiểm tra quy trình · Đã lưu lúc 10:24 · 2 việc cần đối chiếu</small></div><button class="text-button" data-view="work">Mở bản nháp →</button></div>
+    </section>
+    <section class="view active" id="work">
+      <h1 class="page-title">Biên bản kiểm tra quy trình</h1>
+      <p class="intro">Sửa nội dung và xử lý các mục cần đối chiếu trước khi xuất văn bản.</p>
+      <div class="card sourcebar"><strong>Nguồn</strong><span class="source-file">01_BienBan.docx · NĐ 30 · 7 khối</span><button class="pill review-trigger" id="reviewOpen">2 cần đối chiếu →</button><button class="text-button right" data-view="start">Thay nguồn</button></div>
+      <div class="workspace">
+        <aside class="card side"><h2>Cấu trúc</h2><button class="current">▤ Phần đầu <span class="count">1</span></button><button>≡ Nội dung <span class="count zero">0</span></button><button>✍ Phần cuối <span class="count">1</span></button><button>▣ Phụ lục <span class="count zero">0</span></button><button>⋯ Chưa phân loại <span class="count zero">0</span></button></aside>
+        <section class="card editor"><div class="editor-head"><h2>Phần đầu &amp; nội dung</h2><span class="pill blue">Profile công ty</span><span class="helper">Đang soạn bản làm việc</span></div>
+          <div class="editor-content"><p class="section-label">Thông tin văn bản</p><div class="field-grid">
+            <div class="field"><label>Cơ quan ban hành</label><div class="input readonly">CÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC</div></div>
+            <div class="field"><label>Số và ký hiệu</label><div class="input">Số: 12/BB-HTMB</div></div>
+            <div class="field"><label>Địa danh, ngày ban hành</label><div class="input">Hải Phòng, ngày 15 tháng 10 năm 2026</div></div>
+            <div class="field"><label>Loại văn bản</label><div class="input">BIÊN BẢN</div></div>
+            <div class="field full"><label>Trích yếu</label><div class="input">Về việc kiểm tra quy trình thử nghiệm</div></div>
+          </div>
+          <div class="toolbar"><button class="tool" title="Hoàn tác">↶</button><button class="tool"><b>B</b></button><button class="tool"><i>I</i></button><button class="tool">☷</button><button class="tool">• Danh sách</button><button class="tool">▦ Bảng</button><button class="tool more">+ Chèn ▾</button></div>
+          <div class="paper-editor"><p>Nội dung 1. Kiểm tra việc tải tài liệu và phân tích nội dung.</p><p>Nội dung 2. Kiểm tra hiển thị ở trình soạn thảo.</p></div></div>
+          <div class="editor-footer"><span>● Đã lưu · Bản nháp</span><button class="primary" data-view="preview">Xem trước bản nháp →</button></div>
+        </section>
+        <aside class="card issues"><h2>Việc cần xử lý</h2><p class="description">2 mục từ tài liệu nguồn cần người dùng xác nhận.</p><div class="issue"><strong>Nơi nhận chưa có trong nguồn</strong><p>Giữ trống nếu biên bản này không cần nơi nhận; không tự điền.</p><button>Tới phần cuối →</button></div><div class="issue"><strong>Đối chiếu người ký</strong><p>Kiểm tra chức vụ và họ tên với tệp gốc.</p><button>Xem khối nguồn →</button></div><div class="issue done"><strong>Phần đầu đã nhận diện</strong><p>Profile công ty được áp dụng theo thiết lập.</p></div></aside>
+      </div>
+    </section>
+    <section class="view" id="preview">
+      <h1 class="page-title">Xem trước &amp; xuất</h1><p class="intro">Bản xem tham khảo từ DOCX sẽ xuất. Kiểm tra tệp Word bằng Word trước khi dùng chính thức.</p>
+      <div class="preview-layout"><div class="card preview-main"><div class="preview-toolbar"><h2>Bản xem Word · Trang 1/1</h2><button class="utility">Vừa trang</button><button class="utility">100%</button><button class="utility">− / +</button></div><div class="preview-stage"><div class="sheet"><div class="sheet-header"><div>TỔNG CÔNG TY BẢO ĐẢM<br>AN TOÀN HÀNG HẢI VIỆT NAM<strong>CÔNG TY HOA TIÊU HÀNG HẢI MIỀN BẮC</strong></div><div><strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><strong>Độc lập - Tự do - Hạnh phúc</strong></div></div><div class="meta"><span>Số: 12/BB-HTMB</span><span>Hải Phòng, ngày 15 tháng 10 năm 2026</span></div><h3>BIÊN BẢN</h3><p class="subject">Về việc kiểm tra quy trình thử nghiệm</p><p>Nội dung 1. Kiểm tra việc tải tài liệu và phân tích nội dung.</p><p>Nội dung 2. Kiểm tra hiển thị ở trình soạn thảo.</p><div class="sign"><div>Phần nơi nhận: chưa có trong nguồn</div><div><strong>GIÁM ĐỐC</strong><br><br><br>Người ký mẫu</div></div></div></div></div>
+        <aside class="card export"><span class="pill">Bản nháp · 2 mục cần xem</span><h2 style="margin-top:14px">Kiểm tra cuối</h2><p>Quay lại đúng phần cần sửa trước khi xuất bản dùng chính thức.</p><div class="line">△ Nơi nhận chưa xác định <button class="text-button" data-view="work">Sửa →</button></div><div class="line">△ Đối chiếu người ký <button class="text-button" data-view="work">Sửa →</button></div><div class="actions"><button class="primary">Xuất Word nháp</button><button class="secondary">Xuất PDF khi sẵn sàng</button><button class="utility" data-view="work">← Tiếp tục soạn</button></div></aside></div>
+    </section>
+  </main>
+  <div class="mobile-preview-action"><span>Bản nháp · 2 việc cần xem</span><button class="primary">Xuất Word nháp</button></div>
+  <div class="history-cover" id="reviewCover"><div class="history-drawer"><button class="utility close" id="reviewClose">Đóng ×</button><h2>2 mục cần đối chiếu</h2><p>Đối chiếu đoạn nguồn với bản đang soạn; mỗi trường chỉ sửa trong editor.</p><div class="history-item"><strong>Nơi nhận chưa có trong nguồn</strong><small>Nguồn: không thấy khối Nơi nhận. Bản đang soạn: để trống.</small><p>Giữ trống nếu loại văn bản này không cần nơi nhận.</p><button class="text-button" data-view="work">Tới phần cuối →</button></div><div class="history-item"><strong>Đối chiếu người ký</strong><small>Nguồn: khối chữ ký ở cuối tệp. Bản đang soạn: tên mẫu.</small><p>Kiểm tra chức vụ và họ tên trước khi xuất.</p><button class="text-button" data-view="work">Tới trường người ký →</button></div></div></div>
+  <div class="history-cover" id="historyCover"><div class="history-drawer"><button class="utility close" id="historyClose">Đóng ×</button><h2>Lịch sử tài liệu</h2><p>Chọn một bản để xem thay đổi hoặc khôi phục.</p><div class="history-item"><strong>Bản hiện tại</strong><small>Đã lưu lúc 10:24 · 2 việc cần đối chiếu</small></div><div class="history-item"><strong>Nhập 01_BienBan.docx</strong><small>10:12 · Tạo điểm khôi phục sau khi đọc tệp</small></div><div class="history-item"><strong>Trước khi thay nguồn</strong><small>09:58 · Bản soạn trước</small></div></div></div>
+  <script>
+    const views = [...document.querySelectorAll('.view')];
+    const navButtons = [...document.querySelectorAll('.nav button[data-view]')];
+    document.body.dataset.view = 'work';
+    function showView(id) { document.body.dataset.view = id; views.forEach(v => v.classList.toggle('active', v.id === id)); navButtons.forEach(b => b.classList.toggle('active', b.dataset.view === (id === 'start' ? 'work' : id))); window.scrollTo(0,0); }
+    document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
+    const cover = document.getElementById('historyCover');
+    document.getElementById('historyOpen').addEventListener('click', () => cover.classList.add('open'));
+    document.getElementById('historyClose').addEventListener('click', () => cover.classList.remove('open'));
+    cover.addEventListener('click', e => { if (e.target === cover) cover.classList.remove('open'); });
+    const reviewCover = document.getElementById('reviewCover');
+    document.getElementById('reviewOpen').addEventListener('click', () => reviewCover.classList.add('open'));
+    document.getElementById('reviewClose').addEventListener('click', () => reviewCover.classList.remove('open'));
+    reviewCover.addEventListener('click', e => { if (e.target === reviewCover) reviewCover.classList.remove('open'); });
+    reviewCover.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => reviewCover.classList.remove('open')));
+  </script>
+</body>
+</html>

@@ -36,6 +36,23 @@
   border-color: #000000 !important;
 }
 
+/* A Mẫu 1.9 signature table is a layout aid, not a bordered data table. */
+.prose table[style*="border:none"],
+.prose table[style*="border:none"] > tbody > tr > td {
+  border: none !important;
+}
+
+.prose table[style*="border:none"] > tbody > tr > td,
+.minutes-signature-editor table[style*="border:none"] > tbody > tr > td {
+  text-align: center !important;
+  vertical-align: top;
+}
+
+.minutes-signature-editor .ProseMirror table:last-of-type,
+.minutes-signature-editor .ProseMirror table:last-of-type > tbody > tr > td {
+  border: 0 !important;
+}
+
 /* Print styling for Decree 30 / HD 05 A4 document printing */
 @media print {
   html, body {

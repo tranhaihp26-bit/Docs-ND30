@@ -24,7 +24,7 @@ function tableShapeIntact(block: SourceBlock): boolean {
   if (block.kind !== "table") return true;
   const shape = block.tableShape;
   const rows = block.tableData;
-  return Boolean(shape && rows && rows.length === shape.rows && rows.every(row => row.length <= shape.columns));
+  return Boolean(shape && rows && rows.length === shape.rows && rows.every(row => row.length === shape.columns));
 }
 
 export function buildImportReview(source: StructuredImport, selectedRegime: "administrative" | "party"): ImportReviewCheck[] {
@@ -53,8 +53,17 @@ export function buildImportReview(source: StructuredImport, selectedRegime: "adm
     const blockIds = blocks.map(b => b.id);
     const exactOrder = blockIds.length === source.source.blockCount && blockIds.length === source.order.length &&
       blockIds.every((id, index) => id === source.order[index]) && new Set(blockIds).size === blockIds.length;
-    add("IMPORT.SOURCE_OWNERSHIP", "source", "Toàn vẹn khối nguồn", exactOrder ? "PASS" : "NEEDS_REVIEW",
-      exactOrder ? `${blockIds.length} khối, đúng thứ tự và mỗi khối có một vai trò.` : "Số lượng, thứ tự hoặc định danh khối không khớp tệp nguồn.", blockIds);
+    const byId = new Map(blocks.map(block => [block.id, block]));
+    const claims = [
+      ...source.body.sourceBlockIds.map(id => ({ id, role: "body" })),
+      ...source.appendices.flatMap(appendix => appendix.sourceBlockIds.map(id => ({ id, role: "appendix" }))),
+      ...source.unclassified.map(block => ({ id: block.id, role: "unclassified" })),
+    ];
+    const uniqueClaims = new Set(claims.map(claim => claim.id)).size === claims.length;
+    const rolesMatch = claims.every(claim => byId.get(claim.id)?.role === claim.role);
+    const intact = exactOrder && uniqueClaims && rolesMatch;
+    add("IMPORT.SOURCE_OWNERSHIP", "source", "Toàn vẹn khối nguồn", intact ? "PASS" : "NEEDS_REVIEW",
+      intact ? `${blockIds.length} khối, đúng thứ tự và mỗi khối có một vai trò.` : "Số lượng, thứ tự hoặc vai trò khối nguồn không khớp; cần đối chiếu tệp gốc.", blockIds);
   }
   const detected = source.source.detectedRegime;
   add("IMPORT.REGIME_MATCH", "source", "Chế độ văn bản", !detected || detected === "unknown" ? "NOT_EVALUATED" : detected === selectedRegime ? "PASS" : "NEEDS_REVIEW",

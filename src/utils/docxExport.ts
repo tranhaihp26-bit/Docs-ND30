@@ -114,7 +114,8 @@ const INVISIBLE_CELL_BORDER = {
 export function convertHtmlToDocxElements(
   html: string,
   regime: "administrative" | "party" = "administrative",
-  bodyInsetMm = 0
+  bodyInsetMm = 0,
+  documentType = ""
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
   const profile = getStyleProfile(regime);
@@ -144,7 +145,14 @@ export function convertHtmlToDocxElements(
       if (tagName === "table") {
         const trElements = Array.from(child.querySelectorAll("tr"));
         if (trElements.length > 0) {
-          const isHiddenTable = styleAttr.includes("border: none") || child.classList.contains("border-none");
+          const firstRowCells = Array.from(trElements[0].children)
+            .filter(cell => ["td", "th"].includes(cell.tagName.toLowerCase()));
+          const firstRowText = firstRowCells.map(cell => cell.textContent || "");
+          const isMinutesSignatureTable = /BIÊN\s+BẢN/i.test(documentType) && firstRowCells.length === 2 &&
+            firstRowText.some(text => /(THƯ KÝ|NGƯỜI GHI BIÊN BẢN)/i.test(text)) &&
+            firstRowText.some(text => /(CHỦ TỌA|CHỦ TRÌ)/i.test(text));
+          const isHiddenTable = /border\s*:\s*none/i.test(styleAttr) ||
+            child.getAttribute("data-nd30-signature") === "minutes" || child.classList.contains("border-none") || isMinutesSignatureTable;
           const tableBorders = isHiddenTable
             ? {
                 top: { style: BorderStyle.NONE, size: 0, color: "auto" },
@@ -321,6 +329,14 @@ export function convertHtmlToDocxElements(
     if (trimmed.toLowerCase().startsWith("<table")) {
       const rowMatches = trimmed.match(/<tr[\s\S]*?<\/tr>/gi) || [];
       if (rowMatches.length > 0) {
+        const tableOpeningTag = trimmed.match(/^<table\b[^>]*>/i)?.[0] || "";
+        const firstRowCells = (rowMatches[0] || "").match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) || [];
+        const firstRowText = firstRowCells.map(cell => cell.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
+        const isMinutesSignatureTable = /BIÊN\s+BẢN/i.test(documentType) && firstRowCells.length === 2 &&
+          firstRowText.some(text => /(THƯ KÝ|NGƯỜI GHI BIÊN BẢN)/i.test(text)) &&
+          firstRowText.some(text => /(CHỦ TỌA|CHỦ TRÌ)/i.test(text));
+        const isHiddenTable = /\bborder\s*:\s*none\b/i.test(tableOpeningTag) ||
+          /\bdata-nd30-signature\s*=\s*["']minutes["']/i.test(tableOpeningTag) || isMinutesSignatureTable;
         const docxRows = rowMatches.map((trHtml, rowIndex) => {
           const cellMatches = trHtml.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) || [];
           const isThRow = rowIndex === 0 && trHtml.toLowerCase().includes("<th");
@@ -332,7 +348,7 @@ export function convertHtmlToDocxElements(
               const isTh = cellHtml.toLowerCase().startsWith("<th");
               const cellText = cellHtml.replace(/<[^>]*>/g, "").trim();
               return new TableCell({
-                borders: {
+                borders: isHiddenTable ? INVISIBLE_CELL_BORDER : {
                   top: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
                   bottom: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
                   left: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
@@ -359,6 +375,14 @@ export function convertHtmlToDocxElements(
         elements.push(
           new Table({
             width: bodyInsetMm ? {size: convertMillimetersToTwip(COMPANY_HEADER_GEOMETRY_MM.bodyWidth), type: WidthType.DXA} : {size: 100, type: WidthType.PERCENTAGE},
+            ...(isHiddenTable ? {borders: {
+              top: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              left: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              right: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" },
+              insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" },
+            }} : {}),
             rows: docxRows,
           })
         );
@@ -435,6 +459,10 @@ function parseInlineNodes(element: Element, fontSizeHalfPoints: number = 26): Te
     if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
       const tag = el.tagName.toLowerCase();
+      if (tag === "br") {
+        runs.push(new TextRun({ break: 1 }));
+        return;
+      }
       const newFormat = {
         bold: currentFormat.bold || tag === "strong" || tag === "b",
         italic: currentFormat.italic || tag === "em" || tag === "i",
@@ -460,15 +488,32 @@ function parseInlineNodes(element: Element, fontSizeHalfPoints: number = 26): Te
  * @param data Dữ liệu văn bản tuân thủ DocumentFormatType
  * @returns Instance Document của `docx`
  */
-export function detectEmbeddedSignature(bodyHtml: string): boolean {
+export function detectMinutesTwoColumnSignature(bodyHtml: string, documentType = ""): boolean {
   if (!bodyHtml || typeof bodyHtml !== "string") return false;
+  if (!/BIÊN\s+BẢN/i.test(documentType)) return false;
+
+  const tables = bodyHtml.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi) || [];
+  return tables.some(table => {
+    const firstRow = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/i)?.[0] || "";
+    const cells = firstRow.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) || [];
+    const cellText = cells.map(cell => cell.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
+    return cells.length === 2 && cellText.some(cell => /(THƯ KÝ|NGƯỜI GHI BIÊN BẢN)/i.test(cell)) &&
+      cellText.some(cell => /(CHỦ TỌA|CHỦ TRÌ)/i.test(cell));
+  });
+}
+
+export function detectEmbeddedSignature(bodyHtml: string, documentType = ""): boolean {
+  if (!bodyHtml || typeof bodyHtml !== "string") return false;
+  if (detectMinutesTwoColumnSignature(bodyHtml, documentType)) return true;
 
   const tables = bodyHtml.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi) || [];
   if (tables.some(table => {
     const firstRow = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/i)?.[0] || "";
     const cells = firstRow.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) || [];
-    return cells.length >= 3 && cells.some(cell => /THƯ KÝ/i.test(cell)) &&
-      cells.some(cell => /(ĐẠI DIỆN|CHỦ TỌA|CÁN BỘ)/i.test(cell));
+    const cellText = cells.map(cell => cell.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
+    const hasSecretary = cellText.some(cell => /(THƯ KÝ|NGƯỜI GHI BIÊN BẢN)/i.test(cell));
+    const hasChair = cellText.some(cell => /(ĐẠI DIỆN|CHỦ TỌA|CHỦ TRÌ|CÁN BỘ)/i.test(cell));
+    return cells.length >= 3 && hasSecretary && hasChair;
   })) return true;
 
   const hasRecipients = /NƠI NHẬN\s*:/i.test(bodyHtml);
@@ -511,7 +556,7 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const isParty = data.regime === "party";
   const useCompanyHeader = !isParty && data.headerProfile === COMPANY_HEADER_PROFILE_ID;
   const profile = getStyleProfile(data.regime);
-  const bodyParagraphs = convertHtmlToDocxElements(data.bodyHtml, data.regime, useCompanyHeader ? COMPANY_HEADER_GEOMETRY_MM.bodyInset : 0);
+  const bodyParagraphs = convertHtmlToDocxElements(data.bodyHtml, data.regime, useCompanyHeader ? COMPANY_HEADER_GEOMETRY_MM.bodyInset : 0, data.documentType);
 
   const nationalHeader1Text = isParty
     ? "ĐẢNG CỘNG SẢN VIỆT NAM"
@@ -520,7 +565,13 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
   const topHtmlUpper = data.bodyHtml ? data.bodyHtml.slice(0, 1500).toUpperCase() : "";
 
   const hasEmbeddedHeader = topHtmlUpper.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") || topHtmlUpper.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
-  const hasEmbeddedSignature = detectEmbeddedSignature(data.bodyHtml);
+  const hasEmbeddedSignature = detectEmbeddedSignature(data.bodyHtml, data.documentType);
+  const isMinutes = /BIÊN\s+BẢN/i.test(data.documentType);
+  const hasMinutesRecipientInBody = /NƠI NHẬN\s*:/i.test(data.bodyHtml);
+  const minutesRecipientLines = (data.recipients || "")
+    .replace(/^\s*Nơi nhận\s*:\s*/i, "")
+    .split("\n").map(line => line.trim()).filter(Boolean);
+  const shouldRenderMinutesRecipients = isMinutes && hasEmbeddedSignature && !hasMinutesRecipientInBody && minutesRecipientLines.length > 0;
 
   const isHeaderPlaceholder = (!data.orgHeader2 || isPlaceholderValue(data.orgHeader2)) && (!data.referenceNumber || isPlaceholderValue(data.referenceNumber));
   const isSignaturePlaceholder = (!data.signTitle || isPlaceholderValue(data.signTitle)) && (!data.signName || isPlaceholderValue(data.signName));
@@ -776,6 +827,17 @@ export function generateND30DocxDocument(data: DocumentFormatType): Document {
           // 4. TOÀN BỘ NỘI DUNG VĂN BẢN (TỪ TIPTAP HTML)
           // ==========================================
           ...bodyParagraphs,
+
+          ...(shouldRenderMinutesRecipients ? [
+            new Paragraph({
+              spacing: { before: 100, after: 40, line: 220 },
+              children: [new TextRun({ text: "Nơi nhận:", font: "Times New Roman", size: 22, bold: true, italics: true })],
+            }),
+            ...minutesRecipientLines.map(line => new Paragraph({
+              spacing: { before: 20, after: 20, line: 220 },
+              children: [new TextRun({ text: line.startsWith("-") ? line : `- ${line}`, font: "Times New Roman", size: 22 })],
+            })),
+          ] : []),
 
           // Khoảng cách trống trước khối chữ ký
           new Paragraph({ text: "", spacing: { after: 180 } }),

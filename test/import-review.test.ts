@@ -69,6 +69,22 @@ assert.equal(review.find(c => c.id === "IMPORT.RECIPIENTS")?.status, "NOT_APPLIC
 assert.equal(deriveImportStatus(companyMinutes, true), "needs_review", "Placeholder number/date must remain unresolved");
 assert.equal(buildImportReview(companyMinutes, "party").find(c => c.id === "IMPORT.REGIME_MATCH")?.status, "NEEDS_REVIEW");
 
+const missingSignatureCell: StructuredImport = {
+  ...companyMinutes,
+  blocks: companyMinutes.blocks!.map(block => block.id === "sign"
+    ? { ...block, tableData: [["Đại diện", "Cán bộ"]] } : block),
+};
+assert.equal(buildImportReview(missingSignatureCell, "administrative").find(c => c.id === "IMPORT.SIGNATURE_TABLE")?.status,
+  "NEEDS_REVIEW", "A missing cell must not pass table preservation");
+
+const doubleOwnedBody: StructuredImport = {
+  ...companyMinutes,
+  appendices: [{ id: "app", title: "PHỤ LỤC", html: "<p>Nội dung làm việc</p>",
+    blocks: [companyMinutes.blocks![3]], sourceBlockIds: ["body"], extractionStatus: "needs_review" }],
+};
+assert.equal(buildImportReview(doubleOwnedBody, "administrative").find(c => c.id === "IMPORT.SOURCE_OWNERSHIP")?.status,
+  "NEEDS_REVIEW", "One source block must not belong to both body and appendix");
+
 const withUnknown: StructuredImport = {
   ...companyMinutes,
   source: { ...companyMinutes.source, blockCount: 6 },

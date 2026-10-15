@@ -19,7 +19,6 @@ import DOMPurify from "dompurify";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
-import Underline from "@tiptap/extension-underline";
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
 import { 
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, 
@@ -36,6 +35,8 @@ export interface ND30EditorProps {
   onChange: (html: string) => void;
   /** Chế độ thể thức: Hành chính nhà nước hoặc Văn bản Đảng */
   regime?: "administrative" | "party";
+  /** Render a known two-signer minutes table without editor grid borders. */
+  borderlessSignatureTable?: boolean;
   /** Chiều cao tối thiểu của khung soạn thảo */
   minHeight?: string;
 }
@@ -44,6 +45,7 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
   content,
   onChange,
   regime = "administrative",
+  borderlessSignatureTable = false,
   minHeight = "480px",
 }) => {
   const isParty = regime === "party";
@@ -70,8 +72,8 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
     content: DOMPurify.sanitize(content || "<p></p>"),
     editorProps: {
       attributes: {
-        class: `prose max-w-none focus:outline-none min-h-[420px] p-6 font-serif ${isParty ? "text-[14pt]" : "text-[13pt]"} leading-[1.35] text-slate-900 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-slate-400 [&_th]:p-2 [&_th]:bg-slate-100 [&_td]:border [&_td]:border-slate-400 [&_td]:p-2`,
-        style: "font-family: 'Times New Roman', Times, serif;",
+        class: `prose max-w-none focus:outline-none p-6 font-serif ${isParty ? "text-[14pt]" : "text-[13pt]"} leading-[1.35] text-slate-900 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-slate-400 [&_th]:p-2 [&_th]:bg-slate-100 [&_td]:border [&_td]:border-slate-400 [&_td]:p-2 ${borderlessSignatureTable ? "minutes-signature-editor" : ""}`,
+        style: `font-family: 'Times New Roman', Times, serif; min-height: ${minHeight};`,
       },
     },
     onUpdate: ({ editor }) => {
@@ -187,52 +189,12 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
   };
 
   return (
-    <div className="border border-slate-300 rounded-xl overflow-hidden bg-white shadow-xs">
+      <div className={`border border-slate-300 rounded-xl overflow-hidden bg-white shadow-xs ${borderlessSignatureTable ? "minutes-signature-editor" : ""}`}>
       {/* 1. Thanh công cụ cấp cao: Thể thức NĐ 30 / HD 05 */}
-      <div className="bg-slate-100 border-b border-slate-200 p-2 flex flex-wrap items-center gap-1.5 text-xs">
+      <div className="bg-slate-100 border-b border-slate-200 p-2 flex items-center gap-1.5 text-xs overflow-x-auto">
         <span className="font-bold text-slate-700 px-2 py-1 flex items-center gap-1 border-r border-slate-300 mr-1">
           <Scale className="w-3.5 h-3.5 text-blue-600" /> {isParty ? "Chuẩn HD 05:" : "Chuẩn NĐ 30:"}
         </span>
-
-        {/* Nút Chèn Quốc hiệu / Tiêu ngữ */}
-        <button
-          type="button"
-          onClick={insertNationalHeader}
-          className="bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-700 border border-slate-300 px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 shadow-2xs"
-          title="Chèn Quốc hiệu, Tiêu ngữ (căn giữa, in hoa, đậm)"
-        >
-          <FileText className="w-3.5 h-3.5 text-rose-600" /> Quốc hiệu/Tiêu ngữ
-        </button>
-
-        {/* Nút Chèn Cơ quan ban hành */}
-        <button
-          type="button"
-          onClick={insertOrgHeader}
-          className="bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-700 border border-slate-300 px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 shadow-2xs"
-          title="Chèn Tên cơ quan ban hành văn bản"
-        >
-          <Building2 className="w-3.5 h-3.5 text-emerald-600" /> Cơ quan ban hành
-        </button>
-
-        {/* Nút Chèn Địa danh & Ngày tháng */}
-        <button
-          type="button"
-          onClick={insertLocationAndDate}
-          className="bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-700 border border-slate-300 px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 shadow-2xs"
-          title="Chèn Địa danh & Ngày tháng (canh phải, in nghiêng chuẩn NĐ 30)"
-        >
-          <MapPin className="w-3.5 h-3.5 text-cyan-600" /> Địa danh & Ngày tháng
-        </button>
-
-        {/* Nút Chèn Trích yếu */}
-        <button
-          type="button"
-          onClick={insertSubject}
-          className="bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-700 border border-slate-300 px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 shadow-2xs"
-          title="Chèn Trích yếu nội dung văn bản (căn giữa, đậm, nghiêng)"
-        >
-          <Tag className="w-3.5 h-3.5 text-orange-600" /> Trích yếu
-        </button>
 
         {/* Nút Chèn Căn cứ pháp lý */}
         <button
@@ -254,20 +216,11 @@ export const ND30Editor: React.FC<ND30EditorProps> = ({
           <PlusCircle className="w-3.5 h-3.5 text-indigo-600" /> Thêm Điều khoản
         </button>
 
-        {/* Nút Chèn Khối Chữ ký */}
-        <button
-          type="button"
-          onClick={insertSignatureBlock}
-          className="bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-700 border border-slate-300 px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1 shadow-2xs"
-          title="Chèn khối chữ ký và nơi nhận chuẩn 2 cột"
-        >
-          <PenTool className="w-3.5 h-3.5 text-purple-600" /> Khối chữ ký & Nơi nhận
-        </button>
       </div>
 
       {/* 2. Thanh công cụ định dạng chuẩn: Typography & Alignment */}
-      <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex flex-wrap items-center justify-between gap-1 text-xs">
-        <div className="flex flex-wrap items-center gap-1">
+      <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center gap-1 text-xs overflow-x-auto">
+        <div className="flex flex-nowrap items-center gap-1 shrink-0">
           {/* Headings mapped to NĐ 30 standards */}
           <button
             type="button"

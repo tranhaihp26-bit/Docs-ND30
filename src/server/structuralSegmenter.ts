@@ -180,9 +180,10 @@ export function segmentSourceBlocks(
       if (filteredLines.length >= 2) {
         // Some source DOCX files separate two parent-organization lines with
         // alignment spaces inside a single Word paragraph instead of w:br.
-        const parentLines = filteredLines[0].split(/(?: {3,}|\t+)/).map(line => line.trim()).filter(Boolean);
+        const parentLines = filteredLines.slice(0, -1)
+          .flatMap(line => line.split(/(?: {3,}|\t+)/).map(part => part.trim()).filter(Boolean));
         fields.orgHeader1 = { value: parentLines.join("\n"), confidence: "high", status: "extracted", sourceBlockIds: [blocks[0].id] };
-        fields.orgHeader2 = { value: filteredLines.slice(1).join("\n"), confidence: "high", status: "extracted", sourceBlockIds: [blocks[0].id] };
+        fields.orgHeader2 = { value: filteredLines[filteredLines.length - 1], confidence: "high", status: "extracted", sourceBlockIds: [blocks[0].id] };
       } else if (filteredLines.length === 1) {
         fields.orgHeader2 = { value: filteredLines[0], confidence: "high", status: "extracted", sourceBlockIds: [blocks[0].id] };
       }
@@ -468,7 +469,9 @@ export function segmentSourceBlocks(
         }
 
         const rightLines = rightCol.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (rightLines.length >= 3) {
+        if (isMinutesSignTable) {
+          // The whole table is the signature; a second single-signer block would duplicate it.
+        } else if (rightLines.length >= 3) {
           fields.signTitle = { value: rightLines.slice(0, -1).join("\n"), confidence: "high", status: "extracted", sourceBlockIds: [b.id] };
           fields.signName = { value: rightLines[rightLines.length - 1], confidence: "high", status: "extracted", sourceBlockIds: [b.id] };
         } else if (rightLines.length === 2) {

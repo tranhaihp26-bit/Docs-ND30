@@ -11,10 +11,12 @@ import html2canvas from "html2canvas";
 import DOMPurify from "dompurify";
 import ND30Editor from "./components/ND30Editor.tsx";
 import { A4DocumentPreview } from "./components/A4DocumentPreview.tsx";
-import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
+import { detectEmbeddedSignature, detectMinutesTwoColumnSignature, exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
 import { parseLocalFile } from "./utils/localFileImport.ts";
+import { loadDraft, saveDraft, type StoredDraft } from "./utils/draftStore.ts";
 import { assignUnclassifiedBlock, composeImportedBodyHtml, deriveImportStatus, updateImportField } from "./utils/importReview.ts";
 import { buildImportReview } from "./utils/importRules.ts";
+import type { AiAuditSection, AiImportAudit, AuditRegion } from "./shared/aiImportAudit.ts";
 import { 
   type DocumentFormatType, 
   validateND30Compliance, 
@@ -27,6 +29,7 @@ import {
 import { formatStandardDate, extractLocation } from "./server/middleware/compliance.middleware.ts";
 import { detectDocumentType } from "./server/parser.ts";
 import { COMPANY_HEADER_PROFILE_ID, COMPANY_HEADER_PARENT_LINES, applyCompanyProfile, matchesCompanyHeader, LOCKED_COMPANY_FIELDS } from "./canonical/nd30/companyHeader.ts";
+import { MINUTES_TEMPLATE, type TemplatePreset } from "./utils/minutesTemplate.ts";
 
 export interface DocumentState {
   headerProfile?: "generic" | typeof COMPANY_HEADER_PROFILE_ID;
@@ -57,15 +60,15 @@ interface Version {
   title: string;
   data: DocumentState;
   standardType: "state" | "party";
-}
-
-interface TemplatePreset {
-  id: string;
-  name: string;
-  desc: string;
-  type: "state" | "party";
-  badge: string;
-  defaultData: DocumentState;
+  sourceContext?: {
+    structuredImport: StructuredImport | null;
+    sourceSnapshot: StructuredImport | null;
+    uploadedFileName: string;
+    uploadedFileType: "docx" | "txt" | null;
+    rawText: string;
+    uploadedHtml: string;
+    importReviewAccepted: boolean;
+  };
 }
 
 function documentFromImport(source: StructuredImport, standardType: "state" | "party", filename: string, fileType: "docx" | "txt", approved = false): DocumentState {
@@ -263,6 +266,7 @@ const TEMPLATES: TemplatePreset[] = [
       recipients: "Lãnh đạo cơ quan (để b/c);\nCác đơn vị trực thuộc;\nLưu: VT."
     }
   },
+  MINUTES_TEMPLATE,
   {
     id: "nq_dang",
     name: "Nghị quyết của Đảng",
@@ -369,8 +373,15 @@ const TEMPLATES: TemplatePreset[] = [
   }
 ];
 
+const INITIAL_DOCUMENT: DocumentState = applyCompanyProfile({
+  orgHeader1: "", orgHeader2: "", nationalHeader1: "", nationalHeader2: "",
+  locationAndDate: "", documentType: "", referenceNumber: "", subject: "",
+  bodyHtml: "<p></p>", signTitle: "", signName: "", recipients: "",
+  appendices: [], unclassified: [],
+});
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"upload" | "preview" | "history">("upload");
+  const [activeTab, setActiveTab] = useState<"upload" | "preview">("upload");
   const [standardType, setStandardType] = useState<"state" | "party">("state");
   const [rawText, setRawText] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState("");
@@ -392,8 +403,23 @@ export default function App() {
 
   // Structured Import state
   const [structuredImport, setStructuredImport] = useState<StructuredImport | null>(null);
+  const [sourceSnapshot, setSourceSnapshot] = useState<StructuredImport | null>(null);
   const [importReviewAccepted, setImportReviewAccepted] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState<TemplatePreset | null>(null);
+  const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [aiAudit, setAiAudit] = useState<AiImportAudit | null>(null);
+  const [aiAuditOpen, setAiAuditOpen] = useState(false);
+  const [isAiReviewing, setIsAiReviewing] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<"loading" | "saving" | "saved" | "error">("loading");
+  const [savedAt, setSavedAt] = useState("");
+  const draftRevisionRef = useRef(0);
+  const persistedAtRef = useRef<string | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const skipLoadedDraftSaveRef = useRef(false);
+  const auditRevisionRef = useRef(0);
 
   // Compliance Inspection Modal state
   const [showComplianceModal, setShowComplianceModal] = useState(false);
@@ -418,21 +444,108 @@ export default function App() {
     notice?: string;
   } | null>(null);
 
-  // Primary document state (Initial default is Template QD)
-  const [doc, setDoc] = useState<DocumentState>(applyCompanyProfile(TEMPLATES[0].defaultData));
+  // Start with the internal company profile, without silently choosing a document template.
+  const [doc, setDoc] = useState<DocumentState>(INITIAL_DOCUMENT);
 
   // Version History state
   const [versions, setVersions] = useState<Version[]>([
     {
       id: "v_init",
       timestamp: new Date().toLocaleTimeString("vi-VN") + " " + new Date().toLocaleDateString("vi-VN"),
-      title: "Khởi tạo mặc định (Quyết định NĐ 30)",
-      data: applyCompanyProfile(TEMPLATES[0].defaultData),
+      title: "Bản mới chưa chọn mẫu",
+      data: INITIAL_DOCUMENT,
       standardType: "state",
     }
   ]);
 
   const previewRef = useRef<HTMLDivElement>(null);
+  const editorSectionRef = useRef<HTMLDivElement>(null);
+  const focusEditorAfterImport = () => window.requestAnimationFrame(() => {
+    editorSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  useEffect(() => {
+    let active = true;
+    loadDraft().then(saved => {
+      if (!active) return;
+      if (saved) {
+        skipLoadedDraftSaveRef.current = true;
+        setDoc(saved.doc);
+        setStandardType(saved.standardType);
+        setVersions(saved.versions);
+        setStructuredImport(saved.structuredImport);
+        setSourceSnapshot(saved.sourceSnapshot);
+        setUploadedFileName(saved.uploadedFileName);
+        setUploadedFileType(saved.uploadedFileType);
+        setRawText(saved.rawText);
+        setUploadedHtml(saved.uploadedHtml);
+        setImportReviewAccepted(saved.importReviewAccepted);
+        setSavedAt(saved.savedAt);
+        persistedAtRef.current = saved.savedAt;
+        setDraftStatus("saved");
+      } else {
+        setDraftStatus("saving");
+      }
+      setDraftReady(true);
+    }).catch(error => {
+      if (!active) return;
+      setDraftStatus("error");
+      setErrorMsg(error instanceof Error ? error.message : "Không thể đọc bản nháp trên thiết bị.");
+      // Do not overwrite a draft that could not be read.
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    if (skipLoadedDraftSaveRef.current) {
+      skipLoadedDraftSaveRef.current = false;
+      return;
+    }
+    const revision = ++draftRevisionRef.current;
+    setDraftStatus("saving");
+    const timer = window.setTimeout(() => {
+      const snapshot: StoredDraft = {
+        schemaVersion: 1, savedAt: new Date().toISOString(), standardType, doc, versions,
+        structuredImport, sourceSnapshot, uploadedFileName, uploadedFileType, rawText,
+        uploadedHtml, importReviewAccepted,
+      };
+      saveQueueRef.current = saveQueueRef.current.catch(() => {}).then(async () => {
+        await saveDraft(snapshot, persistedAtRef.current);
+        persistedAtRef.current = snapshot.savedAt;
+      });
+      saveQueueRef.current.then(() => {
+        if (revision !== draftRevisionRef.current) return;
+        setSavedAt(snapshot.savedAt);
+        setDraftStatus("saved");
+      }).catch(error => {
+        if (revision !== draftRevisionRef.current) return;
+        setDraftStatus("error");
+        setErrorMsg(error instanceof Error ? error.message : "Không lưu được bản nháp trên thiết bị.");
+      });
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [draftReady, doc, standardType, versions, structuredImport, sourceSnapshot, uploadedFileName, uploadedFileType, rawText, uploadedHtml, importReviewAccepted]);
+
+  useEffect(() => {
+    auditRevisionRef.current += 1;
+    setAiAudit(null);
+    setAiAuditOpen(false);
+  }, [doc, structuredImport, standardType]);
+
+  const downloadDraftBackup = () => {
+    const snapshot: StoredDraft = {
+      schemaVersion: 1, savedAt: new Date().toISOString(), standardType, doc, versions,
+      structuredImport, sourceSnapshot, uploadedFileName, uploadedFileType, rawText,
+      uploadedHtml, importReviewAccepted,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(snapshot)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "docs-nd30-ban-sao-nhap.json";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   // Run compliance check whenever doc or standardType changes
   useEffect(() => {
@@ -449,21 +562,39 @@ export default function App() {
     setComplianceReport(report);
   }, [doc, standardType]);
 
-  const pushVersion = (title: string, newDoc: DocumentState, versionStandardType: "state" | "party" = standardType) => {
+  const pushVersion = (title: string, newDoc: DocumentState, versionStandardType: "state" | "party" = standardType,
+    sourceContext: Version["sourceContext"] = { structuredImport, sourceSnapshot, uploadedFileName, uploadedFileType, rawText, uploadedHtml, importReviewAccepted }) => {
     const newV: Version = {
       id: "v_" + crypto.randomUUID(),
       timestamp: new Date().toLocaleTimeString("vi-VN") + " " + new Date().toLocaleDateString("vi-VN"),
       title,
       data: { ...newDoc },
       standardType: versionStandardType,
+      sourceContext,
     };
-    setVersions(prev => [newV, ...prev]);
+    setVersions(prev => [newV, ...prev].slice(0, 12));
   };
 
   const handleFieldChange = (field: keyof DocumentState, value: string) => {
     // Company identity is locked only for NEW templates. Imported documents stay untouched.
     if (standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID && LOCKED_COMPANY_FIELDS.has(field)) return;
-    setDoc(prev => ({ ...prev, [field]: value }));
+    setDoc(prev => ({ ...prev, [field]: value,
+      importMetadata: prev.importMetadata?.sourceType === "docx" || prev.importMetadata?.sourceType === "txt"
+        ? { ...prev.importMetadata, status: "needs_review" } : prev.importMetadata,
+    }));
+    if (structuredImport) {
+      setStructuredImport(prev => prev ? updateImportField(prev, field, value) : prev);
+      setImportReviewAccepted(false);
+      setReviewOpen(false);
+    }
+  };
+
+  const changeAppendices = (change: (current: AppendixDocument[]) => AppendixDocument[]) => {
+    setDoc(prev => ({ ...prev, appendices: change(prev.appendices || []),
+      importMetadata: prev.importMetadata?.sourceType === "docx" || prev.importMetadata?.sourceType === "txt"
+        ? { ...prev.importMetadata, status: "needs_review" } : prev.importMetadata,
+    }));
+    if (structuredImport) setImportReviewAccepted(false);
   };
 
   const handleHeaderProfileChange = (profile: "generic" | typeof COMPANY_HEADER_PROFILE_ID) => {
@@ -495,17 +626,20 @@ export default function App() {
     setUploadedFileName("");
     setUploadedFileType(null);
     setStructuredImport(null);
+    setSourceSnapshot(null);
     setImportReviewAccepted(false);
-    pushVersion(`Áp dụng mẫu: ${t.name}`, selectedDoc, t.type);
+    pushVersion(`Áp dụng mẫu: ${t.name}`, selectedDoc, t.type,
+      { structuredImport: null, sourceSnapshot: null, uploadedFileName: "", uploadedFileType: null, rawText: "", uploadedHtml: "", importReviewAccepted: false });
     setSuccessMsg(`Đã tải mẫu "${t.name}". Bạn có thể bắt đầu soạn thảo và chỉnh sửa ngay!`);
     setActiveTab("upload");
     setPendingTemplate(null);
+    focusEditorAfterImport();
   };
 
   const selectTemplate = (tId: string) => {
     const t = TEMPLATES.find(x => x.id === tId);
     if (!t) return;
-    if (JSON.stringify(doc) !== JSON.stringify(versions[0]?.data)) {
+    if (uploadedFileName || JSON.stringify(doc) !== JSON.stringify(versions[0]?.data)) {
       setPendingTemplate(t);
       return;
     }
@@ -540,7 +674,9 @@ export default function App() {
       setRawText(parsed.text);
       setUploadedHtml(DOMPurify.sanitize(parsed.html));
       setStructuredImport(parsed.structured);
+      setSourceSnapshot(structuredClone(parsed.structured));
       setImportReviewAccepted(false);
+      setReviewOpen(false);
       setUploadedFileName(parsed.filename); // Set filename only after successful parse
       setUploadedFileType(parsed.fileType); // Set fileType from validated response
 
@@ -550,8 +686,11 @@ export default function App() {
       pushVersion(`Trước khi tải tệp ${parsed.filename}`, doc);
       setStandardType(importedStandard);
       setDoc(importedDoc);
-      pushVersion(`Tải và phân vùng tệp ${parsed.filename}`, importedDoc, importedStandard);
+      pushVersion(`Tải và phân vùng tệp ${parsed.filename}`, importedDoc, importedStandard,
+        { structuredImport: parsed.structured, sourceSnapshot: structuredClone(parsed.structured), uploadedFileName: parsed.filename,
+          uploadedFileType: parsed.fileType, rawText: parsed.text, uploadedHtml: DOMPurify.sanitize(parsed.html), importReviewAccepted: false });
       setActiveTab("upload");
+      focusEditorAfterImport();
 
       const appCount = parsed.structured?.appendices?.length || 0;
       const blockCount = parsed.blockCount;
@@ -588,6 +727,62 @@ export default function App() {
     return DOMPurify.sanitize(paragraphs || "<p></p>");
   };
 
+  const handleAiImportReview = async () => {
+    if (!structuredImport) {
+      setErrorMsg("Tải DOCX/TXT để AI rà soát các vùng đã parse.");
+      return;
+    }
+    const confirmed = window.confirm(
+      "AI sẽ nhận toàn bộ nội dung trong các trường đã parse, nội dung đang soạn, bảng ký, phần cuối, phụ lục và khối chưa phân loại để đánh giá. Dữ liệu được gửi tới Google Gemini qua máy chủ đã cấu hình; tài liệu có thể chứa dữ liệu cá nhân. Báo cáo chỉ đưa ra nhận xét và không tự sửa bản soạn. Bạn có muốn gửi dữ liệu để rà soát không?",
+    );
+    if (!confirmed) return;
+    const requestedRevision = auditRevisionRef.current;
+    setIsAiReviewing(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const response = await fetch("/api/ai/review-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          standardType,
+          structuredImport: {
+            ...structuredImport,
+            source: {
+              type: structuredImport.source.type,
+              blockCount: structuredImport.source.blockCount,
+              detectedRegime: structuredImport.source.detectedRegime,
+            },
+          },
+          document: {
+            orgHeader1: doc.orgHeader1, orgHeader2: doc.orgHeader2,
+            nationalHeader1: doc.nationalHeader1, nationalHeader2: doc.nationalHeader2,
+            referenceNumber: doc.referenceNumber, locationAndDate: doc.locationAndDate,
+            documentType: doc.documentType, subject: doc.subject, bodyHtml: doc.bodyHtml,
+            signTitle: doc.signTitle, signName: doc.signName, recipients: doc.recipients,
+            appendices: (doc.appendices || []).map(({ id, title, referenceText, html }) => ({ id, title, referenceText, html })),
+          },
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success || !result.audit) {
+        throw new Error(result.error || "AI chưa trả về báo cáo rà soát.");
+      }
+      if (requestedRevision !== auditRevisionRef.current) {
+        throw new Error("Tài liệu đã thay đổi trong lúc AI rà soát. Hãy chạy lại để kết quả gắn với bản mới nhất.");
+      }
+      setAiAudit(result.audit as AiImportAudit);
+      setAiAuditOpen(true);
+      setSuccessMsg(result.audit.scope === "complete"
+        ? "AI đã rà soát các vùng dữ liệu đã parse. Hãy xem các nhận xét và tự quyết định nội dung chỉnh sửa."
+        : "AI chỉ rà soát được một phần; các vùng còn lại được đánh dấu chưa đánh giá.");
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : "AI chưa thể rà soát tài liệu lúc này.");
+    } finally {
+      setIsAiReviewing(false);
+    }
+  };
+
   // Direct raw text import to editor without AI (P0-01)
   const handleRawTextToEditor = () => {
     if (structuredImport && uploadedFileName) {
@@ -601,7 +796,8 @@ export default function App() {
     const cleanHtml = safeTextToHtml(rawText);
     const detectedType = detectDocumentType(rawText, standardType);
 
-    const newDoc: DocumentState = {
+    const pastedDoc: DocumentState = {
+      headerProfile: "generic",
       orgHeader1: "",
       orgHeader2: "",
       nationalHeader1: standardType === "party" ? "ĐẢNG CỘNG SẢN VIỆT NAM" : "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
@@ -613,12 +809,20 @@ export default function App() {
       bodyHtml: cleanHtml,
       signTitle: "",
       signName: "",
-      recipients: ""
+      recipients: "",
+      appendices: [],
+      unclassified: [],
+      importMetadata: { sourceType: "paste", status: "needs_review" },
     };
+    const newDoc = standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID
+      ? applyCompanyProfile(pastedDoc) : pastedDoc;
     setDoc(newDoc);
+    setStructuredImport(null);
+    setSourceSnapshot(null);
     pushVersion("Nhập nội dung dán thủ công", newDoc);
     setSuccessMsg("Đã đưa nội dung vào trình soạn thảo thành công!");
     setActiveTab("upload");
+    focusEditorAfterImport();
   };
 
   // Optional AI Structuring & Formatting (P0-04: AI is optional, confirms before overwrite)
@@ -842,14 +1046,19 @@ export default function App() {
   };
 
   const restoreVersion = (v: Version) => {
+    if (JSON.stringify(doc) !== JSON.stringify(v.data)) {
+      pushVersion(`Trước khi khôi phục: ${v.title}`, doc);
+    }
     setDoc(v.data);
     setStandardType(v.standardType);
-    setRawText("");
-    setUploadedHtml("");
-    setUploadedFileName("");
-    setUploadedFileType(null);
-    setStructuredImport(null);
-    setImportReviewAccepted(false);
+    setRawText(v.sourceContext?.rawText || "");
+    setUploadedHtml(v.sourceContext?.uploadedHtml || "");
+    setUploadedFileName(v.sourceContext?.uploadedFileName || "");
+    setUploadedFileType(v.sourceContext?.uploadedFileType || null);
+    setStructuredImport(v.sourceContext?.structuredImport || null);
+    setSourceSnapshot(v.sourceContext?.sourceSnapshot || null);
+    setImportReviewAccepted(v.sourceContext?.importReviewAccepted || false);
+    setHistoryOpen(false);
     setSuccessMsg(`Đã khôi phục thành công phiên bản: "${v.title}" (${v.timestamp})`);
     setActiveTab("upload");
   };
@@ -872,6 +1081,12 @@ export default function App() {
     setSuccessMsg(`Đã áp dụng sửa nhanh cho: ${issue.title}`);
   };
 
+  const hasEmbeddedMultiSignature = detectEmbeddedSignature(doc.bodyHtml, doc.documentType);
+  const pendingImportChecks = structuredImport
+    ? buildImportReview(sourceSnapshot || structuredImport, standardType === "party" ? "party" : "administrative")
+      .filter(check => check.status === "NEEDS_REVIEW")
+    : [];
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       {/* Top Application Header */}
@@ -882,13 +1097,14 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 flex items-center gap-2">
-              DocForm 30 
+              Docs-ND30
               <span className="text-[11px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold">
                 NĐ 30/2020 & HD 05
               </span>
             </h1>
-            <p className="text-xs text-slate-500 hidden md:block">
-              Chuẩn hóa thể thức văn bản hành chính Việt Nam & Xuất Microsoft Word
+            <p className="max-w-[220px] sm:max-w-[360px] truncate text-xs text-slate-500"
+              title={uploadedFileName || doc.subject || "Bản mới chưa đặt tên"}>
+              {uploadedFileName || doc.subject || "Bản mới chưa đặt tên"}
             </p>
           </div>
         </div>
@@ -901,7 +1117,7 @@ export default function App() {
               activeTab === "upload" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <LayoutTemplate className="w-3.5 h-3.5" /> 1. Khởi tạo & Soạn thảo
+            <LayoutTemplate className="w-3.5 h-3.5" /> 1. Soạn thảo & đối chiếu
           </button>
           <button
             onClick={() => setActiveTab("preview")}
@@ -909,20 +1125,17 @@ export default function App() {
               activeTab === "preview" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <Eye className="w-3.5 h-3.5" /> 2. Xem trước
-          </button>
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-              activeTab === "history" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <History className="w-3.5 h-3.5" /> Lịch sử ({versions.length})
+            <Eye className="w-3.5 h-3.5" /> 2. Xem trước & xuất
           </button>
         </div>
 
         {/* Action Header Buttons */}
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-[11px] font-semibold px-2 py-1 rounded ${draftStatus === "saved" ? "bg-emerald-50 text-emerald-800" : draftStatus === "error" ? "bg-rose-50 text-rose-800" : "bg-slate-100 text-slate-700"}`}>
+            {draftStatus === "saved" ? `Đã lưu trên thiết bị · ${new Date(savedAt).toLocaleTimeString("vi-VN")}` : draftStatus === "error" ? "Chưa lưu được" : draftStatus === "loading" ? "Đang đọc bản nháp" : "Đang lưu…"}
+          </span>
+          <button onClick={() => setHistoryOpen(true)} className="text-xs font-semibold text-slate-700 px-2 py-1.5 rounded border border-slate-200"><History className="w-3.5 h-3.5 inline" /> Lịch sử</button>
+          <button onClick={downloadDraftBackup} className="text-xs font-semibold text-slate-700 px-2 py-1.5 rounded border border-slate-200" title="Tải bản sao dự phòng về máy">Sao lưu</button>
           {/* Compliance Inspector Trigger */}
           <button
             onClick={() => setShowComplianceModal(true)}
@@ -930,14 +1143,11 @@ export default function App() {
             title={standardType === "party" ? "Kiểm tra thể thức theo Hướng dẫn 05-HD/VPTW" : "Kiểm tra thể thức theo Nghị định 30/2020/NĐ-CP"}
           >
             <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-            <span>Thể thức: </span>
-            <span className="font-bold text-amber-900">
-              {complianceReport ? `${complianceReport.score}%` : "Kiểm tra"}
-            </span>
+            <span>Kiểm tra thể thức</span>
           </button>
 
           {/* Export to Word */}
-          <button
+          {activeTab === "preview" && <button
             onClick={exportToDocx}
             disabled={isExportingDocx}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
@@ -945,7 +1155,7 @@ export default function App() {
           >
             <Download className="w-3.5 h-3.5" />
             <span>{isExportingDocx ? "Đang tạo..." : "Xuất Word (.docx)"}</span>
-          </button>
+          </button>}
 
           {/* Export to PDF */}
           {activeTab === "preview" && <button
@@ -1001,13 +1211,26 @@ export default function App() {
                   Không bắt buộc cần API key
                 </div>
               </div>
+              <input id="upload-file-input" type="file" accept=".docx,.txt" onChange={handleFileUpload} disabled={isUploading} className="sr-only" aria-label="Tải tài liệu DOCX hoặc TXT" />
 
-              {/* LỰA CHỌN A: SOẠN TỪ BIỂU MẪU QUY CHUẨN (P0-01) */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" aria-label="Bắt đầu tài liệu">
+                <button type="button" onClick={() => document.getElementById("upload-file-input")?.click()} className="text-left rounded-xl border border-blue-300 bg-blue-50 p-4 hover:bg-blue-100">
+                  <Upload className="w-5 h-5 text-blue-700 mb-2" /><strong className="block text-sm">Tải DOCX/TXT</strong><span className="text-xs text-slate-600">Đọc tệp và mở ngay trong trình soạn thảo</span>
+                </button>
+                <button type="button" onClick={() => setTemplateLibraryOpen(value => !value)} className="text-left rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50">
+                    <LayoutTemplate className="w-5 h-5 text-blue-700 mb-2" /><strong className="block text-sm">Chọn mẫu</strong><span className="text-xs text-slate-600">{templateLibraryOpen ? "Đóng thư viện mẫu" : `Mở thư viện ${TEMPLATES.length} mẫu`}</span>
+                </button>
+                <button type="button" onClick={() => document.getElementById("paste-source-input")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="text-left rounded-xl border border-slate-200 bg-white p-4 hover:bg-slate-50">
+                  <Edit3 className="w-5 h-5 text-blue-700 mb-2" /><strong className="block text-sm">Dán văn bản</strong><span className="text-xs text-slate-600">Nhập trực tiếp vào phần soạn thảo</span>
+                </button>
+              </div>
+
+              {/* Thư viện mẫu chỉ mở khi người dùng chọn. */}
+              {templateLibraryOpen && <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <LayoutTemplate className="w-4 h-4 text-blue-600" />
-                    Lựa chọn A: Soạn nhanh từ 10 biểu mẫu quy chuẩn
+                    Lựa chọn A: Soạn nhanh từ {TEMPLATES.length} biểu mẫu quy chuẩn
                   </h2>
                   <span className="text-[11px] text-slate-500">Bấm vào mẫu để bắt đầu soạn ngay</span>
                 </div>
@@ -1040,44 +1263,23 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
 
               {/* LỰA CHỌN B: TẢI TÀI LIỆU LÊN (P0-01, P0-02) */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+              {(uploadedFileName || isUploading) && <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <Upload className="w-4 h-4 text-emerald-600" />
-                    Lựa chọn B: Tải tệp tài liệu (.docx, .txt)
+                    {isUploading ? "Đang đọc tệp tài liệu…" : "Tệp nguồn đã nhập"}
                   </h2>
                   {uploadedFileName && <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Đã chọn: {uploadedFileName}</span>
                     <button type="button" className="text-xs text-blue-700 underline" onClick={() => {
                       setRawText(""); setUploadedHtml(""); setUploadedFileName(""); setUploadedFileType(null);
-                      setStructuredImport(null); setImportReviewAccepted(false);
+                      setStructuredImport(null); setSourceSnapshot(null); setImportReviewAccepted(false);
                       setSuccessMsg("Đã chuyển sang nhập văn bản tự do. Bản đang soạn vẫn được giữ ở phía dưới.");
                     }}>Dùng văn bản dán</button>
                   </div>}
-                </div>
-
-                <div className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-5 text-center transition bg-slate-50/50 relative">
-                  <input
-                    type="file"
-                    accept=".docx,.txt"
-                    onChange={handleFileUpload}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                    disabled={isUploading}
-                  />
-                  <div className="flex flex-col items-center justify-center space-y-2">
-                    <div className="bg-white p-2.5 rounded-full text-emerald-600 shadow-xs border border-slate-200">
-                      <Upload className="w-5 h-5" />
-                    </div>
-                    <p className="text-xs font-semibold text-slate-800">
-                      {isUploading ? "Đang trích xuất nội dung..." : "Nhấn để chọn file Word (.docx) hoặc kéo thả vào đây"}
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      Hỗ trợ Microsoft Word (.docx) và tệp văn bản thuần (.txt)
-                    </p>
-                  </div>
                 </div>
 
                 {/* Khi đã tải file thành công, hiển thị 2 lựa chọn rõ ràng: Direct Editor vs AI Structuring */}
@@ -1088,8 +1290,15 @@ export default function App() {
                         <span className="text-[11px] text-emerald-700 italic">Đã đưa vào soạn thảo bên dưới · Cần rà soát kết quả parse</span>
                     </div>
 
-                    {structuredImport && (
-                      <div className="bg-white border border-emerald-200 rounded-lg p-3 space-y-3 text-xs">
+                    {structuredImport && <button type="button" onClick={() => setReviewOpen(true)} className="rounded-lg bg-white border border-emerald-300 px-3 py-2 text-xs font-semibold text-blue-700">
+                      Đối chiếu {structuredImport.source.blockCount} khối nguồn · {pendingImportChecks.length} mục cần xem →
+                    </button>}
+                    {structuredImport && reviewOpen && (
+                      <div role="dialog" aria-label="Đối chiếu tệp nguồn" className="fixed inset-y-0 right-0 z-40 w-full lg:w-[580px] overflow-y-auto bg-white border-l border-slate-200 shadow-2xl p-5 space-y-3 text-xs">
+                        <div className="flex items-center justify-between sticky top-0 bg-white py-2 border-b border-slate-200 z-10">
+                          <strong className="text-sm">Đối chiếu với tệp gốc</strong>
+                          <button type="button" onClick={() => setReviewOpen(false)} className="rounded border border-slate-300 px-3 py-1.5 text-xs">Đóng</button>
+                        </div>
                         <p className="font-semibold text-slate-900">Đối chiếu các vùng trích xuất với tệp gốc ({structuredImport.source.blockCount} khối)</p>
                         <label className="block text-slate-700 font-medium">
                           Chế độ quy tắc cho tài liệu đã tải
@@ -1106,7 +1315,7 @@ export default function App() {
                         {structuredImport.source.detectedRegime && structuredImport.source.detectedRegime !== "unknown" &&
                           structuredImport.source.detectedRegime !== (standardType === "state" ? "administrative" : "party") &&
                           <p className="text-amber-800 font-medium">Chế độ đã chọn khác dấu hiệu quốc hiệu/Đảng hiệu trong tệp nguồn; cần kiểm tra trước khi xác nhận.</p>}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           {([
                             ["orgHeader1", "Cơ quan cấp trên"], ["orgHeader2", "Cơ quan ban hành"],
                             ["nationalHeader1", "Quốc hiệu / Đảng hiệu"], ["nationalHeader2", "Tiêu ngữ"],
@@ -1116,38 +1325,59 @@ export default function App() {
                             ["recipients", "Nơi nhận"],
                           ] as const).map(([key, label]) => {
                             const field = structuredImport.fields[key];
+                            const originalField = sourceSnapshot?.fields[key] || field;
+                            const currentValue = key === "orgHeader1" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID
+                              ? COMPANY_HEADER_PARENT_LINES.join("\n") : doc[key];
+                            const lockedCompanyField = doc.headerProfile === COMPANY_HEADER_PROFILE_ID && LOCKED_COMPANY_FIELDS.has(key);
+                            const multiSignerField = Boolean((key === "signTitle" || key === "signName") && (sourceSnapshot || structuredImport).signatureHtml);
+                            const optionalRecipients = key === "recipients" && /^BIÊN BẢN\b/i.test((sourceSnapshot || structuredImport).fields.documentType?.value || "");
+                            const needsAttention = !multiSignerField && !optionalRecipients &&
+                              (field?.status === "missing" || field?.status === "ambiguous" || isPlaceholderValue(field?.value || ""));
                             return (
-                              <label key={key} className="block text-slate-700">
+                              <div key={key} className="block text-slate-700 rounded border border-slate-200 p-2">
                                 <span className="font-medium">{label}</span>
-                                <span className={`ml-2 text-[10px] ${field?.status === "missing" || field?.status === "ambiguous" ? "text-amber-700" : "text-emerald-700"}`}>
-                                  {field?.status === "missing" ? "Chưa tìm thấy" : field?.status === "ambiguous" ? "Cần kiểm tra" : field?.status === "user_confirmed" ? "Đã sửa" : `Trích xuất (${field?.confidence || "?"})`}
+                                <span className={`ml-2 text-[10px] ${needsAttention ? "text-amber-700" : "text-emerald-700"}`}>
+                                  {multiSignerField ? "Trong bảng ký nhiều người" : optionalRecipients && !field?.value ? "Không có trong biên bản nguồn" : needsAttention ? "Cần đối chiếu/điền" : field?.status === "user_confirmed" ? "Đã sửa" : `Trích xuất (${field?.confidence || "?"})`}
                                 </span>
-                                <textarea
-                                  rows={key === "orgHeader1" || (field?.value || "").includes("\n") ? 2 : 1}
-                                  value={field?.value || ""}
-                                  onChange={(e) => {
-                                    const value = e.target.value;
-                                    setStructuredImport(prev => prev ? updateImportField(prev, key, value) : prev);
-                                    setImportReviewAccepted(false);
-                                    setDoc(prev => ({ ...prev, [key]: value,
-                                      headerProfile: key === "orgHeader1" || key === "orgHeader2" ? "generic" : prev.headerProfile,
-                                      importMetadata: prev.importMetadata ? { ...prev.importMetadata, status: "needs_review" } : prev.importMetadata,
-                                    }));
-                                  }}
-                                  className="mt-1 w-full min-h-9 resize-y border border-slate-300 rounded px-2 py-1.5 text-slate-900 whitespace-pre-wrap"
-                                />
-                              </label>
+                                <p className="mt-1 whitespace-pre-wrap break-words"><b>Nguồn:</b> {originalField?.value || "[Không tìm thấy]"}</p>
+                                {!multiSignerField && currentValue !== originalField?.value && <p className="mt-1 whitespace-pre-wrap break-words text-blue-800"><b>Đang soạn:</b> {String(currentValue || "[Trống]")}</p>}
+                                <button type="button" className="mt-2 text-blue-700 font-semibold underline" onClick={() => {
+                                  setReviewOpen(false);
+                                  document.getElementById(multiSignerField ? "field-bodyHtml" : `field-${key}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                                }}>{multiSignerField ? "Tới bảng ký để sửa" : lockedCompanyField ? "Xem trường theo profile" : "Tới trường để sửa"}</button>
+                              </div>
                             );
                           })}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {Object.entries(structuredImport.fields).filter(([key]) => ![
+                            "orgHeader1", "orgHeader2", "nationalHeader1", "nationalHeader2", "locationAndDate",
+                            "documentType", "referenceNumber", "subject", "signTitle", "signName", "recipients",
+                          ].includes(key)).map(([key, field]) => (
+                            <div id={`source-field-${key}`} key={key} className="rounded border border-slate-200 p-2 text-slate-700">
+                              <strong>{key}</strong>
+                              <p className="mt-1 whitespace-pre-wrap break-words">{field.value || "[Không tìm thấy]"}</p>
+                              <p className="mt-1 text-[10px] text-slate-500">Parser: {field.status} · độ tin cậy {field.confidence}</p>
+                            </div>
+                          ))}
                         </div>
                         <div className="border-t border-slate-200 pt-2 space-y-1 text-slate-700">
                           <p><strong>Nội dung chính:</strong> {structuredImport.body.sourceBlockIds.length} khối</p>
                           {structuredImport.signatureHtml && <p><strong>Bảng ký nhiều người:</strong> Đã giữ nguyên bảng từ tệp gốc để đưa vào trình soạn thảo và bản xuất.</p>}
                           <details className="bg-slate-50 rounded p-2">
+                            <summary className="cursor-pointer font-medium">Phần đầu, thông tin và dấu phân cách trong tệp gốc</summary>
+                            {(structuredImport.blocks || []).filter(block => block.role === "header" || block.role === "metadata" || block.role === "separator").map(block => (
+                              <div id={`source-block-${block.id}`} key={block.id} className="mt-2 border-t border-slate-200 pt-2 whitespace-pre-wrap break-words">
+                                <strong>#{block.index + 1} · {block.role} · {block.kind}</strong>{block.tableShape && ` · ${block.tableShape.rows} hàng × ${block.tableShape.columns} cột`}
+                                <div>{block.text || "[Khối không có văn bản]"}</div>
+                              </div>
+                            ))}
+                          </details>
+                          <details className="bg-slate-50 rounded p-2">
                             <summary className="cursor-pointer font-medium">Mở toàn bộ nội dung chính theo từng khối nguồn</summary>
                             <div className="mt-2 space-y-2">
                               {(structuredImport.blocks || []).filter(block => block.role === "body").map(block => (
-                                <div key={block.id} className="border-t border-slate-200 pt-2 whitespace-pre-wrap break-words">
+                                <div id={`source-block-${block.id}`} key={block.id} className="border-t border-slate-200 pt-2 whitespace-pre-wrap break-words">
                                   <strong>#{block.index + 1} · {block.kind}</strong>{block.tableShape && ` · ${block.tableShape.rows} hàng × ${block.tableShape.columns} cột`}
                                   <div>{block.text || "[Khối không có văn bản]"}</div>
                                 </div>
@@ -1157,7 +1387,7 @@ export default function App() {
                           <details className="bg-slate-50 rounded p-2">
                             <summary className="cursor-pointer font-medium">Phần cuối: chữ ký và nơi nhận</summary>
                             {(structuredImport.blocks || []).filter(block => block.role === "signature" || block.role === "recipients").map(block => (
-                              <div key={block.id} className="mt-2 border-t border-slate-200 pt-2 whitespace-pre-wrap break-words">
+                              <div id={`source-block-${block.id}`} key={block.id} className="mt-2 border-t border-slate-200 pt-2 whitespace-pre-wrap break-words">
                                 <strong>#{block.index + 1} · {block.role} · {block.kind}</strong><div>{block.text || "[Khối không có văn bản]"}</div>
                               </div>
                             ))}
@@ -1166,14 +1396,14 @@ export default function App() {
                           {structuredImport.appendices.map((appendix, index) => (
                             <details key={appendix.id} className="pl-2 bg-slate-50 rounded p-2">
                               <summary className="cursor-pointer">{index + 1}. {appendix.title || "Chưa có tiêu đề"} · {appendix.blocks.length} khối · {appendix.extractionStatus === "needs_review" ? "Cần kiểm tra" : "Đã nhận diện"}</summary>
-                              {appendix.blocks.map(block => <p key={block.id} className="mt-2 whitespace-pre-wrap break-words">#{block.index + 1} · {block.kind}: {block.text || "[Khối không có văn bản]"}</p>)}
+                              {appendix.blocks.map(block => <p id={`source-block-${block.id}`} key={block.id} className="mt-2 whitespace-pre-wrap break-words">#{block.index + 1} · {block.kind}: {block.text || "[Khối không có văn bản]"}</p>)}
                             </details>
                           ))}
                           <p className={structuredImport.unclassified.length ? "text-amber-800 font-semibold" : ""}>
                             Khối chưa phân loại: {structuredImport.unclassified.length}
                           </p>
                           {structuredImport.unclassified.map((block) => (
-                            <div key={block.id} className="pl-2 whitespace-pre-wrap break-words">#{block.index + 1} ({block.kind}): {block.text || "[Khối không có văn bản]"}
+                            <div id={`source-block-${block.id}`} key={block.id} className="pl-2 whitespace-pre-wrap break-words">#{block.index + 1} ({block.kind}): {block.text || "[Khối không có văn bản]"}
                               <div className="flex gap-2 mt-1">
                                 {(["body", "signature", "appendix"] as const).map(destination => <button key={destination} type="button" className="text-blue-700 underline" onClick={() => {
                                   const updated = assignUnclassifiedBlock(structuredImport, block.id, destination);
@@ -1187,9 +1417,9 @@ export default function App() {
                           ))}
                         </div>
                         <details className="border-t border-slate-200 pt-2">
-                          <summary className="cursor-pointer font-semibold text-slate-800">Quy tắc và trạng thái kiểm tra từng vùng</summary>
+                          <summary className="cursor-pointer font-semibold text-slate-800">Kiểm tra trên tệp gốc · không chứng nhận bản đang soạn</summary>
                           <div className="mt-2 space-y-2">
-                            {buildImportReview(structuredImport, standardType === "party" ? "party" : "administrative").map(check => (
+                            {buildImportReview(sourceSnapshot || structuredImport, standardType === "party" ? "party" : "administrative").map(check => (
                               <div key={check.id} className="border border-slate-200 rounded p-2">
                                 <div className="font-medium">{check.label} · <span className={check.status === "NEEDS_REVIEW" ? "text-amber-700" : "text-slate-600"}>{({PASS: "Đạt", NEEDS_REVIEW: "Cần rà soát", NOT_EVALUATED: "Chưa đánh giá", NOT_APPLICABLE: "Không áp dụng"} as const)[check.status]}</span></div>
                                 <p>{check.detail}</p>
@@ -1212,7 +1442,7 @@ export default function App() {
 
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* LỰA CHỌN C: DÁN HOẶC NHẬP NỘI DUNG TỰ DO (P0-01) */}
               {!uploadedFileName && <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
@@ -1225,6 +1455,7 @@ export default function App() {
                 </div>
 
                 <textarea
+                  id="paste-source-input"
                   rows={5}
                   value={rawText}
                   onChange={(e) => {
@@ -1239,7 +1470,7 @@ export default function App() {
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:border-blue-500 font-sans leading-relaxed"
                 />
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="max-w-md">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Chuẩn thể thức áp dụng:</label>
                     <select
@@ -1255,41 +1486,35 @@ export default function App() {
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Yêu cầu bổ sung cho AI (tùy chọn):</label>
-                    <input
-                      type="text"
-                      value={customInstructions}
-                      onChange={(e) => setCustomInstructions(e.target.value)}
-                      placeholder="VD: Căn cứ luật chuyên ngành, phân chia 4 điều..."
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   <button
                     onClick={handleRawTextToEditor}
                       disabled={!rawText.trim() || Boolean(structuredImport && uploadedFileName)}
-                    className="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-xs shadow-xs disabled:opacity-50"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    <span>Đưa nội dung vào Soạn thảo ngay (Không dùng AI)</span>
-                  </button>
-
-                  <button
-                    onClick={handleAiFormat}
-                    disabled={isAiLoading || !rawText.trim() || Boolean(structuredImport && uploadedFileName)}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-xs shadow-xs disabled:opacity-50"
                   >
-                    <Sparkles className="w-4 h-4 text-yellow-300" />
-                    <span>{isAiLoading ? "AI đang phân tích..." : "Chuẩn hóa thể thức bằng AI"}</span>
+                    <Edit3 className="w-4 h-4" />
+                    <span>Đưa vào trình soạn thảo</span>
                   </button>
                 </div>
+                <details className="border-t border-slate-200 pt-3 text-xs text-slate-700">
+                  <summary className="cursor-pointer font-semibold">AI tùy chọn</summary>
+                  <div className="mt-3 space-y-2">
+                    <label className="block font-semibold" htmlFor="ai-instructions">Yêu cầu bổ sung</label>
+                    <input id="ai-instructions" type="text" value={customInstructions} onChange={(e) => setCustomInstructions(e.target.value)}
+                      placeholder="VD: Kiểm tra diễn đạt của nội dung đã dán"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800" />
+                    <button onClick={handleAiFormat} disabled={isAiLoading || !rawText.trim()}
+                      className="bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 font-semibold px-3 py-2 rounded-lg disabled:opacity-50">
+                      {isAiLoading ? "AI đang phân tích..." : "Đề xuất bằng AI"}
+                    </button>
+                  </div>
+                </details>
               </div>}
 
               {/* Soạn thảo nằm trong cùng bước với khởi tạo, tải tệp và đối chiếu parse. */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+            <div ref={editorSectionRef} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4 scroll-mt-32">
               
               {/* Header Action Toolbar */}
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
@@ -1302,6 +1527,10 @@ export default function App() {
                     {standardType === 'party' ? 'Hướng dẫn 05 Đảng' : 'Nghị định 30 Nhà nước'}
                   </span>
                 </div>
+
+                {structuredImport && <button type="button" onClick={() => setReviewOpen(true)} className="text-xs font-semibold text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1.5">
+                  Đối chiếu nguồn · {pendingImportChecks.length} mục cần xem
+                </button>}
 
                 {/* Quick Utility Actions */}
                 <div className="flex items-center gap-2">
@@ -1335,6 +1564,17 @@ export default function App() {
                 </div>
               </div>
 
+              {structuredImport && <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2.5">
+                <div className="text-xs text-violet-950">
+                  <strong>AI rà soát toàn bộ nội dung đã parse</strong>
+                  <p className="mt-0.5 text-violet-800">AI đánh giá các trường, khối nguồn, ô bảng, nội dung thân, phần ký, nơi nhận, phụ lục và dữ liệu chưa phân loại. Khi xác nhận, bản đang soạn cùng dữ liệu đã parse được gửi tới Google Gemini để rà soát định dạng, nội dung, trình bày và bố cục có thể suy ra từ dữ liệu. AI chỉ báo cáo, không tự sửa.</p>
+                </div>
+                <button type="button" onClick={handleAiImportReview} disabled={isAiReviewing}
+                  className="shrink-0 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60">
+                  {isAiReviewing ? "Gemini đang rà soát…" : "Rà soát toàn bộ bằng AI"}
+                </button>
+              </div>}
+
               {standardType === "state" && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3">
                   <label htmlFor="company-header-profile" className="block text-[11px] font-semibold text-slate-800 mb-1">
@@ -1356,12 +1596,13 @@ export default function App() {
               )}
 
               {/* Thể thức cơ quan ban hành */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     Cơ quan chủ quản cấp trên (nếu có):
                   </label>
                   <textarea
+                    id="field-orgHeader1"
                     rows={2}
                     value={standardType === "state" && doc.headerProfile === COMPANY_HEADER_PROFILE_ID ? COMPANY_HEADER_PARENT_LINES.join("\n") : doc.orgHeader1}
                     onChange={(e) => handleFieldChange("orgHeader1", e.target.value.toUpperCase())}
@@ -1375,6 +1616,7 @@ export default function App() {
                     Tên cơ quan, tổ chức ban hành (*):
                   </label>
                   <input
+                    id="field-orgHeader2"
                     type="text"
                     value={doc.orgHeader2}
                     onChange={(e) => handleFieldChange("orgHeader2", e.target.value.toUpperCase())}
@@ -1386,10 +1628,11 @@ export default function App() {
               </div>
 
               {/* Quốc hiệu và Tiêu ngữ */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Quốc hiệu (Dòng 1):</label>
                   <input
+                    id="field-nationalHeader1"
                     type="text"
                     value={doc.nationalHeader1}
                     onChange={(e) => handleFieldChange("nationalHeader1", e.target.value)}
@@ -1400,6 +1643,7 @@ export default function App() {
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Tiêu ngữ (Dòng 2):</label>
                   <input
+                    id="field-nationalHeader2"
                     type="text"
                     value={doc.nationalHeader2}
                     onChange={(e) => handleFieldChange("nationalHeader2", e.target.value)}
@@ -1411,10 +1655,11 @@ export default function App() {
               </div>
 
               {/* Địa danh ngày tháng & Số ký hiệu & Loại văn bản */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Số và ký hiệu văn bản:</label>
                   <input
+                    id="field-referenceNumber"
                     type="text"
                     value={doc.referenceNumber}
                     onChange={(e) => handleFieldChange("referenceNumber", e.target.value)}
@@ -1438,6 +1683,7 @@ export default function App() {
                     </button>
                   </div>
                   <input
+                    id="field-locationAndDate"
                     type="text"
                     value={doc.locationAndDate}
                     onChange={(e) => handleFieldChange("locationAndDate", e.target.value)}
@@ -1448,6 +1694,7 @@ export default function App() {
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Tên loại văn bản:</label>
                   <input
+                    id="field-documentType"
                     type="text"
                     value={doc.documentType}
                     onChange={(e) => handleFieldChange("documentType", e.target.value.toUpperCase())}
@@ -1461,6 +1708,7 @@ export default function App() {
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">Trích yếu nội dung văn bản:</label>
                 <input
+                  id="field-subject"
                   type="text"
                   value={doc.subject}
                   onChange={(e) => handleFieldChange("subject", e.target.value)}
@@ -1470,7 +1718,7 @@ export default function App() {
               </div>
 
               {/* ND30 Tiptap Editor */}
-              <div>
+              <div id="field-bodyHtml">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-[11px] font-semibold text-slate-700">
                     Nội dung chi tiết (Trình soạn thảo {standardType === "party" ? "HD 05" : "NĐ 30"}):
@@ -1503,6 +1751,7 @@ export default function App() {
                     content={doc.bodyHtml}
                     onChange={(html) => handleFieldChange("bodyHtml", html)}
                     regime={standardType === "party" ? "party" : "administrative"}
+                    borderlessSignatureTable={detectMinutesTwoColumnSignature(doc.bodyHtml, doc.documentType)}
                     minHeight="440px"
                   />
                 ) : (
@@ -1516,30 +1765,38 @@ export default function App() {
               </div>
 
               {/* Chức vụ, Họ tên người ký, Nơi nhận */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Chức vụ người ký:</label>
-                  <textarea
-                    rows={2}
-                    value={doc.signTitle}
-                    onChange={(e) => handleFieldChange("signTitle", e.target.value)}
-                    placeholder="VD: TM. ỦY BAN NHÂN DÂN&#10;CHỦ TỊCH"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Họ tên người ký:</label>
-                  <input
-                    type="text"
-                    value={doc.signName}
-                    onChange={(e) => handleFieldChange("signName", e.target.value)}
-                    placeholder="Ghi rõ họ và tên người ký"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-bold"
-                  />
-                </div>
+              {hasEmbeddedMultiSignature && <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                Khối chữ ký đã nằm trong nội dung chính. Sửa tên và chức danh ngay trong bảng; nơi nhận được chỉnh ở ô riêng bên dưới.
+              </p>}
+              <div className={`grid grid-cols-1 ${hasEmbeddedMultiSignature ? "" : "md:grid-cols-3"} gap-3`}>
+                {!hasEmbeddedMultiSignature && <>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Chức vụ người ký:</label>
+                    <textarea
+                      id="field-signTitle"
+                      rows={2}
+                      value={doc.signTitle}
+                      onChange={(e) => handleFieldChange("signTitle", e.target.value)}
+                      placeholder="VD: TM. ỦY BAN NHÂN DÂN&#10;CHỦ TỊCH"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Họ tên người ký:</label>
+                    <input
+                      id="field-signName"
+                      type="text"
+                      value={doc.signName}
+                      onChange={(e) => handleFieldChange("signName", e.target.value)}
+                      placeholder="Ghi rõ họ và tên người ký"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-800 font-bold"
+                    />
+                  </div>
+                </>}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Nơi nhận:</label>
                   <textarea
+                    id="field-recipients"
                     rows={2}
                     value={doc.recipients}
                     onChange={(e) => handleFieldChange("recipients", e.target.value)}
@@ -1550,7 +1807,7 @@ export default function App() {
               </div>
 
               {/* SECTION: PHỤ LỤC VĂN BẢN ĐỘC LẬP (P0-D / P0-B) */}
-              <div className="bg-amber-50/40 border border-amber-200/80 rounded-xl p-4 space-y-3 mt-4">
+              <div id="section-appendices" className="bg-amber-50/40 border border-amber-200/80 rounded-xl p-4 space-y-3 mt-4">
                 <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1566,15 +1823,12 @@ export default function App() {
                         id: `appendix-${Date.now()}`,
                         title: `PHỤ LỤC ${(doc.appendices?.length || 0) + 1}`,
                         referenceText: `(Kèm theo ${doc.documentType || "Văn bản"} ${doc.referenceNumber || ""})`,
-                        html: "<p>Nội dung phụ lục mới...</p>",
+                        html: "<p></p>",
                         blocks: [],
                         sourceBlockIds: [],
-                        extractionStatus: "confirmed",
+                        extractionStatus: "needs_review",
                       };
-                      setDoc(prev => ({
-                        ...prev,
-                        appendices: [...(prev.appendices || []), newApp]
-                      }));
+                      changeAppendices(current => [...current, newApp]);
                     }}
                     className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition"
                   >
@@ -1598,10 +1852,9 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => {
-                              setDoc(prev => ({
-                                ...prev,
-                                appendices: prev.appendices?.filter((_, i) => i !== idx)
-                              }));
+                              if (!window.confirm(`Xóa ${app.title || `phụ lục ${idx + 1}`} khỏi bản đang soạn? Bạn có thể khôi phục trong Lịch sử.`)) return;
+                              pushVersion(`Trước khi xóa ${app.title || `phụ lục ${idx + 1}`}`, doc);
+                              changeAppendices(current => current.filter((_, i) => i !== idx));
                             }}
                             className="text-[11px] text-rose-600 hover:text-rose-800 underline font-medium"
                           >
@@ -1617,10 +1870,10 @@ export default function App() {
                               value={app.title || ""}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                setDoc(prev => {
-                                  const list = [...(prev.appendices || [])];
+                                changeAppendices(current => {
+                                  const list = [...current];
                                   list[idx] = { ...list[idx], title: val };
-                                  return { ...prev, appendices: list };
+                                  return list;
                                 });
                               }}
                               className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-semibold text-slate-800"
@@ -1633,10 +1886,10 @@ export default function App() {
                               value={app.referenceText || ""}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                setDoc(prev => {
-                                  const list = [...(prev.appendices || [])];
+                                changeAppendices(current => {
+                                  const list = [...current];
                                   list[idx] = { ...list[idx], referenceText: val };
-                                  return { ...prev, appendices: list };
+                                  return list;
                                 });
                               }}
                               className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs text-slate-800 italic"
@@ -1645,19 +1898,17 @@ export default function App() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Nội dung / Bảng HTML:</label>
-                          <textarea
-                            rows={3}
-                            value={app.html || ""}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setDoc(prev => {
-                                const list = [...(prev.appendices || [])];
-                                list[idx] = { ...list[idx], html: val };
-                                return { ...prev, appendices: list };
-                              });
-                            }}
-                            className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-mono text-slate-800"
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">Nội dung và bảng phụ lục:</label>
+                          <ND30Editor
+                            key={app.id}
+                            content={app.html || "<p></p>"}
+                            onChange={(html) => changeAppendices(current => {
+                              const list = [...current];
+                              list[idx] = { ...list[idx], html, extractionStatus: "needs_review" };
+                              return list;
+                            })}
+                            regime={standardType === "party" ? "party" : "administrative"}
+                            minHeight="180px"
                           />
                         </div>
                       </div>
@@ -1667,47 +1918,20 @@ export default function App() {
               </div>
 
               {Boolean(doc.unclassified?.length) && (
-                <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-2">
-                  <h3 className="text-xs font-bold text-amber-950">Khối chưa phân loại ({doc.unclassified?.length}) — cần đối chiếu tệp gốc</h3>
-                  <p className="text-xs text-amber-900">Các khối này sẽ được giữ ở cuối bản Word dưới nhãn cần kiểm tra. Có thể chuyển khối phù hợp vào nội dung chính.</p>
-                  {doc.unclassified?.map((block) => (
-                    <div key={block.id} className="bg-white border border-amber-200 rounded-lg p-2 text-xs space-y-2">
-                      <p className="text-slate-800 whitespace-pre-wrap break-words">#{block.index + 1} ({block.kind}): {block.text || "[Khối không có văn bản]"}</p>
-                      <button type="button" className="text-blue-700 underline" onClick={() => {
-                        const html = block.html || safeTextToHtml(block.text);
-                        setDoc(prev => ({
-                          ...prev,
-                          bodyHtml: `${prev.bodyHtml || ""}${html}`,
-                          unclassified: (prev.unclassified || []).filter(item => item.id !== block.id),
-                          importMetadata: prev.importMetadata ? { ...prev.importMetadata, status: "needs_review" } : prev.importMetadata,
-                        }));
-                      }}>Chuyển vào cuối nội dung chính</button>
-                    </div>
-                  ))}
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 text-xs text-amber-950 flex items-center justify-between gap-3">
+                  <span><strong>{doc.unclassified?.length} khối chưa phân loại.</strong> Mở đối chiếu để xem nguyên văn và gán từng khối.</span>
+                  <button type="button" onClick={() => setReviewOpen(true)} className="font-semibold text-blue-700 underline shrink-0">Mở đối chiếu</button>
                 </div>
               )}
 
               {/* Bottom Actions */}
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <button
-                  onClick={() => {
-                    pushVersion("Lưu chỉnh sửa biên tập", doc);
-                    setSuccessMsg("Đã lưu thay đổi vào lịch sử phiên bản!");
-                    setActiveTab("preview");
-                  }}
+                  onClick={() => setActiveTab("preview")}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-xs shadow-xs"
                 >
                   <Eye className="w-4 h-4" />
-                  <span>Lưu thay đổi & Xem trước trang A4</span>
-                </button>
-
-                <button
-                  onClick={exportToDocx}
-                  disabled={isExportingDocx}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-5 py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-xs shadow-xs disabled:opacity-50"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Xuất Word (.docx)</span>
+                  <span>Xem trước bản nháp</span>
                 </button>
               </div>
 
@@ -1737,17 +1961,18 @@ export default function App() {
           {/* ========================================================
               TAB 4: LỊCH SỬ PHIÊN BẢN (P1-05)
              ======================================================== */}
-          {activeTab === "history" && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+          {historyOpen && (
+            <div role="dialog" aria-label="Lịch sử bản nháp" className="fixed inset-y-0 right-0 z-50 w-full sm:w-[520px] overflow-y-auto bg-white border-l border-slate-200 p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <History className="w-4 h-4 text-purple-600" />
                   Lịch sử các phiên bản tài liệu
                 </h2>
                 <span className="text-xs text-slate-500 font-medium">{versions.length} phiên bản đã ghi nhận</span>
+                <button type="button" onClick={() => setHistoryOpen(false)} className="text-xs border border-slate-300 rounded px-2 py-1">Đóng</button>
               </div>
               <p className="text-xs text-slate-500">
-                Các phiên bản được giữ trong phiên làm việc hiện tại. Hãy xuất Word trước khi tải lại hoặc đóng trang.
+                Bản nháp và các mốc được lưu trên thiết bị này. Bạn có thể tải bản sao dự phòng ở thanh trên.
               </p>
 
               <div className="space-y-2.5 mt-2">
@@ -1809,7 +2034,7 @@ export default function App() {
                   : "bg-amber-50 border-amber-200 text-amber-950"
               }`}>
                 <div className="space-y-1">
-                  <h4 className="font-bold text-sm">Kiểm tra 9 trường thể thức: {complianceReport.score}/100 điểm</h4>
+                  <h4 className="font-bold text-sm">Kiểm tra 9 trường dữ liệu</h4>
                   <p className="text-[11px] opacity-80">
                     Đạt {complianceReport.passedChecks}/{complianceReport.totalChecks} tiêu chí thành phần dữ liệu (NĐ 30 / HD 05).
                   </p>
@@ -1895,6 +2120,66 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {aiAuditOpen && aiAudit && <div role="dialog" aria-label="Báo cáo rà soát AI" className="fixed inset-y-0 right-0 z-50 flex w-full flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-2xl md:w-[640px]">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-violet-200 bg-white px-5 py-4">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Rà soát các phần đã parse</h3>
+            <p className="mt-1 text-[11px] text-slate-600">Gemini · {aiAudit.model} · {aiAudit.reviewedChunks}/{aiAudit.totalChunks} lượt thành công{aiAudit.skippedChunks ? ` · ${aiAudit.skippedChunks} lượt vượt giới hạn` : ""}</p>
+          </div>
+          <button type="button" onClick={() => setAiAuditOpen(false)} className="rounded border border-slate-300 px-3 py-1.5 text-xs">Đóng</button>
+        </div>
+        <div className="space-y-4 p-4 text-xs">
+          <div className={`rounded-lg border px-3 py-2 ${aiAudit.scope === "complete" ? "border-blue-200 bg-blue-50 text-blue-950" : "border-amber-300 bg-amber-50 text-amber-950"}`}>
+            {aiAudit.scope === "complete" ? "Đã rà soát toàn bộ dữ liệu được gửi." : "Báo cáo chưa đầy đủ; vùng chưa xử lý được ghi rõ bên dưới."} Nhận xét không tự áp dụng vào bản soạn.
+          </div>
+          {aiAudit.sections.map((section: AiAuditSection) => <section key={section.region} className="rounded-xl border border-slate-200 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <strong className="text-slate-900">{{header:"Phần đầu",metadata:"Thông tin văn bản",body:"Nội dung chính",footer:"Phần cuối",appendix:"Phụ lục",other:"Khối chưa phân loại"}[section.region]}</strong>
+                <p className="mt-0.5 text-[10px] text-slate-500">{section.reviewedChunks}/{section.totalChunks} lượt đã rà soát</p>
+              </div>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${section.status === "needs_review" ? "bg-amber-100 text-amber-800" : section.status === "not_evaluated" || section.status === "partially_evaluated" ? "bg-slate-100 text-slate-700" : section.status === "not_applicable" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-800"}`}>
+                {section.status === "needs_review" ? "Có nhận xét" : section.status === "not_evaluated" ? "Chưa đánh giá" : section.status === "partially_evaluated" ? "Rà soát chưa đủ" : section.status === "not_applicable" ? "Không có dữ liệu" : "AI không nêu vấn đề"}
+              </span>
+            </div>
+            {section.summary && <p className="mt-2 whitespace-pre-wrap text-slate-700">{section.summary}</p>}
+            <div className="mt-2 space-y-2">
+              {section.findings.map((finding, index) => <div key={`${finding.region}-${finding.fieldKey || finding.blockId}-${index}`} className="rounded-lg bg-slate-50 p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-semibold text-slate-800">{finding.severity === "attention" ? "Cần xem" : "Gợi ý"} · {({content:"Nội dung",format:"Định dạng",layout:"Bố cục",structure:"Cấu trúc"} as const)[finding.category]}</div>
+                  <button type="button" className="shrink-0 text-blue-700 underline" onClick={() => {
+                    setAiAuditOpen(false);
+                    const standardFields = new Set(["orgHeader1", "orgHeader2", "nationalHeader1", "nationalHeader2", "referenceNumber", "locationAndDate", "documentType", "subject", "bodyHtml", "signTitle", "signName", "recipients"]);
+                    if (finding.fieldKey && standardFields.has(finding.fieldKey)) document.getElementById(`field-${finding.fieldKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    else if (finding.fieldKey === "appendices" || finding.region === "appendix") document.getElementById("section-appendices")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    else if (finding.region === "body") document.getElementById("field-bodyHtml")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    else if (finding.fieldKey && finding.fieldKey !== "signatureHtml") {
+                      setReviewOpen(true);
+                      window.setTimeout(() => document.getElementById(`source-field-${finding.fieldKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
+                    } else if (finding.blockId || finding.fieldKey === "signatureHtml" || finding.region === "other") {
+                      setReviewOpen(true);
+                      if (finding.blockId) window.setTimeout(() => {
+                        const sourceElement = document.getElementById(`source-block-${finding.blockId}`);
+                        if (sourceElement?.closest("details")) sourceElement.closest("details")!.open = true;
+                        sourceElement?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }, 120);
+                    }
+                    else document.getElementById("field-bodyHtml")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}>Tới vùng này</button>
+                </div>
+                {(finding.fieldKey || finding.blockId) && <p className="mt-1 text-[10px] text-slate-500">Vị trí: {finding.fieldKey ? ({orgHeader1:"Cơ quan cấp trên",orgHeader2:"Cơ quan ban hành",nationalHeader1:"Quốc hiệu",nationalHeader2:"Tiêu ngữ",referenceNumber:"Số và ký hiệu",locationAndDate:"Địa danh, ngày tháng",documentType:"Loại văn bản",subject:"Trích yếu",bodyHtml:"Nội dung chính",signTitle:"Chức vụ người ký",signName:"Họ tên người ký",recipients:"Nơi nhận",signatureHtml:"Bảng ký nhiều người",appendices:"Phụ lục"} as Record<string,string>)[finding.fieldKey] || finding.fieldKey : `Khối nguồn ${finding.blockId}`}</p>}
+                <p className="mt-1 text-slate-700">{finding.observation}</p>
+                <p className="mt-1 text-violet-900"><strong>Đề xuất:</strong> {finding.recommendation}</p>
+              </div>)}
+            </div>
+          </section>)}
+          {aiAudit.visualLimitations.length > 0 && <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <strong>Chưa thể xác nhận bằng báo cáo AI</strong>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">{aiAudit.visualLimitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
+          </section>}
+        </div>
+      </div>}
 
       {/* ========================================================
           MODAL 2: XÁC NHẬN ÁP DỤNG ĐỀ XUẤT AI (P0-04: User Gate)

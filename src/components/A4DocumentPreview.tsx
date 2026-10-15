@@ -79,7 +79,7 @@ export const A4DocumentPreview: React.FC<A4DocumentPreviewProps> = ({
   const hasEmbeddedHeader =
     topHtmlUpper.includes("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM") ||
     topHtmlUpper.includes("ĐẢNG CỘNG SẢN VIỆT NAM");
-  const hasEmbeddedSignature = detectEmbeddedSignature(bodyHtml);
+  const hasEmbeddedSignature = detectEmbeddedSignature(bodyHtml, doc.documentType);
 
   // 1. Calculate responsive scale based on container width
   useEffect(() => {
