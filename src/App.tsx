@@ -441,6 +441,8 @@ export default function App() {
   const [aiAudit, setAiAudit] = useState<AiImportAudit | null>(null);
   const [aiAuditOpen, setAiAuditOpen] = useState(false);
   const [isAiReviewing, setIsAiReviewing] = useState(false);
+  const [aiAutoReview, setAiAutoReview] = useState(false);
+  const [parsedSourceRevision, setParsedSourceRevision] = useState(0);
   const [draftReady, setDraftReady] = useState(false);
   const [draftStatus, setDraftStatus] = useState<"loading" | "saving" | "saved" | "error">("loading");
   const [savedAt, setSavedAt] = useState("");
@@ -449,6 +451,8 @@ export default function App() {
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const skipLoadedDraftSaveRef = useRef(false);
   const auditRevisionRef = useRef(0);
+  const originalSourceFileRef = useRef<File | null>(null);
+  const autoReviewedSourceRevisionRef = useRef(0);
 
   // Compliance Inspection Modal state
   const [showComplianceModal, setShowComplianceModal] = useState(false);
@@ -665,6 +669,7 @@ export default function App() {
     setStructuredImport(null);
     setSourceSnapshot(null);
     setImportReviewAccepted(false);
+    originalSourceFileRef.current = null;
     pushVersion(`Áp dụng mẫu: ${t.name}`, selectedDoc, t.type,
       { structuredImport: null, sourceSnapshot: null, uploadedFileName: "", uploadedFileType: null, rawText: "", uploadedHtml: "", importReviewAccepted: false });
     setSuccessMsg(`Đã tải mẫu "${t.name}". Bạn có thể bắt đầu soạn thảo và chỉnh sửa ngay!`);
@@ -712,6 +717,8 @@ export default function App() {
       setReviewOpen(false);
       setUploadedFileName(parsed.filename); // Set filename only after successful parse
       setUploadedFileType(parsed.fileType); // Set fileType from validated response
+      originalSourceFileRef.current = file;
+      setParsedSourceRevision(revision => revision + 1);
 
       const detectedRegime = parsed.structured.source.detectedRegime;
       const importedStandard = detectedRegime === "party" ? "party" : detectedRegime === "administrative" ? "state" : standardType;
@@ -798,25 +805,30 @@ export default function App() {
     return DOMPurify.sanitize(paragraphs || "<p></p>");
   };
 
-  const handleAiImportReview = async () => {
+  async function handleAiImportReview(autoConsent = false) {
     if (!structuredImport) {
       setErrorMsg("Tải DOCX/TXT để AI rà soát các vùng đã parse.");
       return;
     }
-    const confirmed = window.confirm(
-      "AI sẽ nhận toàn bộ nội dung trong các trường đã parse, nội dung đang soạn, từng khối người ký, phần cuối, phụ lục và khối chưa phân loại để đánh giá. Dữ liệu được gửi tới Google Gemini qua máy chủ đã cấu hình; tài liệu có thể chứa dữ liệu cá nhân. Báo cáo chỉ đưa ra nhận xét và không tự sửa bản soạn. Bạn có muốn gửi dữ liệu để rà soát không?",
-    );
-    if (!confirmed) return;
+    const sourceFile = originalSourceFileRef.current;
+    if (!sourceFile) {
+      setErrorMsg("File gốc chưa còn trong bộ nhớ phiên này. Hãy tải lại tài liệu để AI đối chiếu với kết quả parse.");
+      return;
+    }
+    if (!autoConsent && !aiAutoReview) {
+      const confirmed = window.confirm(
+        "File DOCX/TXT gốc sẽ được gửi tạm tới máy chủ ứng dụng để trích văn bản độc lập. Văn bản trích xuất cùng toàn bộ trường/khối đã parse sẽ được gửi tới Google Gemini để đối chiếu. File gốc không được gửi dưới dạng DOCX nhị phân đến Gemini và không được lưu trên máy chủ; bố cục Word, ngắt trang, hình ảnh và vị trí trên trang sẽ được ghi là chưa đánh giá nếu không có bản render. Tài liệu có thể chứa dữ liệu cá nhân. AI chỉ báo cáo, không tự sửa. Bạn đồng ý gửi dữ liệu cho lượt rà soát này không?",
+      );
+      if (!confirmed) return;
+    }
     const requestedRevision = auditRevisionRef.current;
     setIsAiReviewing(true);
     setErrorMsg("");
     setSuccessMsg("");
     try {
-      const response = await fetch("/api/ai/review-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const payload = {
           standardType,
+          parseRevision: requestedRevision,
           structuredImport: {
             ...structuredImport,
             source: {
@@ -834,8 +846,11 @@ export default function App() {
             signatureBlocks: doc.signatureBlocks || [],
             appendices: (doc.appendices || []).map(({ id, title, referenceText, html }) => ({ id, title, referenceText, html })),
           },
-        }),
-      });
+        };
+      const formData = new FormData();
+      formData.append("sourceFile", sourceFile, sourceFile.name);
+      formData.append("payload", JSON.stringify(payload));
+      const response = await fetch("/api/ai/review-import", { method: "POST", body: formData });
       const result = await response.json();
       if (!response.ok || !result.success || !result.audit) {
         throw new Error(result.error || "AI chưa trả về báo cáo rà soát.");
@@ -846,14 +861,21 @@ export default function App() {
       setAiAudit(result.audit as AiImportAudit);
       setAiAuditOpen(true);
       setSuccessMsg(result.audit.scope === "complete"
-        ? "AI đã rà soát các vùng dữ liệu đã parse. Hãy xem các nhận xét và tự quyết định nội dung chỉnh sửa."
-        : "AI chỉ rà soát được một phần; các vùng còn lại được đánh dấu chưa đánh giá.");
+        ? "AI đã đối chiếu văn bản trích độc lập từ file gốc với dữ liệu parse. Hãy kiểm tra bằng chứng và tự quyết định nội dung chỉnh sửa."
+        : "AI chỉ rà soát được một phần; phần vượt giới hạn hoặc chưa thể kiểm tra được đánh dấu rõ.");
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : "AI chưa thể rà soát tài liệu lúc này.");
     } finally {
       setIsAiReviewing(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    if (aiAutoReview && parsedSourceRevision > 0 && parsedSourceRevision !== autoReviewedSourceRevisionRef.current && structuredImport && originalSourceFileRef.current) {
+      autoReviewedSourceRevisionRef.current = parsedSourceRevision;
+      void handleAiImportReview(true);
+    }
+  }, [aiAutoReview, parsedSourceRevision, structuredImport]);
 
   // Direct raw text import to editor without AI (P0-01)
   const handleRawTextToEditor = () => {
@@ -865,6 +887,7 @@ export default function App() {
       setErrorMsg("Vui lòng dán hoặc nhập nội dung văn bản trước.");
       return;
     }
+    originalSourceFileRef.current = null;
     const cleanHtml = safeTextToHtml(rawText);
     const detectedType = detectDocumentType(rawText, standardType);
 
@@ -1147,6 +1170,7 @@ export default function App() {
     setUploadedFileType(v.sourceContext?.uploadedFileType || null);
     setStructuredImport(v.sourceContext?.structuredImport || null);
     setSourceSnapshot(v.sourceContext?.sourceSnapshot || null);
+    originalSourceFileRef.current = null;
     setImportReviewAccepted(v.sourceContext?.importReviewAccepted || false);
     setHistoryOpen(false);
     setSuccessMsg(`Đã khôi phục thành công phiên bản: "${v.title}" (${v.timestamp})`);
@@ -1591,6 +1615,7 @@ export default function App() {
                   value={rawText}
                   onChange={(e) => {
                     setRawText(e.target.value);
+                    originalSourceFileRef.current = null;
                     setUploadedFileName("");
                     setUploadedHtml("");
                     setUploadedFileType(null);
@@ -1697,10 +1722,20 @@ export default function App() {
 
               {structuredImport && <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2.5">
                 <div className="text-xs text-violet-950">
-                  <strong>AI rà soát toàn bộ nội dung đã parse</strong>
-                  <p className="mt-0.5 text-violet-800">AI đánh giá các trường, khối nguồn, ô bảng, nội dung thân, phần ký, nơi nhận, phụ lục và dữ liệu chưa phân loại. Khi xác nhận, bản đang soạn cùng dữ liệu đã parse được gửi tới Google Gemini để rà soát định dạng, nội dung, trình bày và bố cục có thể suy ra từ dữ liệu. AI chỉ báo cáo, không tự sửa.</p>
+                  <strong>Đối chiếu file gốc với kết quả parse bằng AI</strong>
+                  <p className="mt-0.5 text-violet-800">Ứng dụng trích văn bản độc lập từ file gốc rồi so với các trường, khối nguồn, ô bảng, body, phần cuối và phụ lục. Chỉ bản trích văn bản và dữ liệu parse được gửi tới Gemini; bố cục trang Word chưa được render sẽ hiện là chưa đánh giá. AI chỉ báo cáo, không tự sửa.</p>
+                  <label className="mt-2 flex items-start gap-2 text-violet-950">
+                    <input type="checkbox" checked={aiAutoReview} onChange={event => {
+                      if (!event.target.checked) { setAiAutoReview(false); return; }
+                      const accepted = window.confirm(
+                        "Bật tự động rà soát trong phiên này? Sau mỗi lần parse, file gốc sẽ được gửi tạm tới máy chủ ứng dụng để trích văn bản; văn bản trích xuất và toàn bộ dữ liệu đã parse sẽ được gửi tới Google Gemini. File gốc không được lưu trên máy chủ hoặc gửi dưới dạng DOCX nhị phân tới Gemini. Không bật tùy chọn này khi tài liệu chứa thông tin bạn không được phép gửi ra dịch vụ AI.",
+                      );
+                      if (accepted) setAiAutoReview(true);
+                    }} className="mt-0.5 rounded border-violet-400" />
+                    <span><strong>Tự động rà soát sau khi parse</strong> <span className="font-normal">(chỉ giữ trong phiên này)</span></span>
+                  </label>
                 </div>
-                <button type="button" onClick={handleAiImportReview} disabled={isAiReviewing}
+                <button type="button" onClick={() => void handleAiImportReview()} disabled={isAiReviewing}
                   className="shrink-0 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60">
                   {isAiReviewing ? "Gemini đang rà soát…" : "Rà soát toàn bộ bằng AI"}
                 </button>
@@ -2314,10 +2349,18 @@ export default function App() {
           <div className={`rounded-lg border px-3 py-2 ${aiAudit.scope === "complete" ? "border-blue-200 bg-blue-50 text-blue-950" : "border-amber-300 bg-amber-50 text-amber-950"}`}>
             {aiAudit.scope === "complete" ? "Đã rà soát toàn bộ dữ liệu được gửi." : "Báo cáo chưa đầy đủ; vùng chưa xử lý được ghi rõ bên dưới."} Nhận xét không tự áp dụng vào bản soạn.
           </div>
+          {aiAudit.sourceHash && <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+            <strong>Đối chiếu nguồn:</strong> {aiAudit.sourceExtractionMethod === "mammoth_docx" ? "trích văn bản độc lập từ DOCX bằng Mammoth" : "đọc văn bản UTF-8 độc lập từ TXT"}.
+            {aiAudit.sourceIntegrity && <p className="mt-1">
+              {aiAudit.sourceIntegrity.status === "matched" ? "Chuỗi từ khớp" : aiAudit.sourceIntegrity.status === "mismatch" ? `Chuỗi từ có khác biệt đầu tiên tại vị trí ${aiAudit.sourceIntegrity.firstMismatchAt}` : "Chưa đối chiếu được chuỗi từ"}
+              : {aiAudit.sourceIntegrity?.sourceTokenCount ?? 0} từ nguồn / {aiAudit.sourceIntegrity?.parsedTokenCount ?? 0} từ đã parse · phạm vi {aiAudit.sourceIntegrity?.coverage === "partial" ? "có thành phần OOXML chưa đọc" : "đối chiếu chuỗi từ trích xuất"}.
+            </p>}
+            <p className="mt-1 break-all text-[10px] text-slate-500">SHA-256 {aiAudit.sourceHash} · bộ quy tắc {aiAudit.rulePackVersion || "không xác định"}{aiAudit.rulePackStatus === "no_verified_pack" ? " (không có rule pack đã xác minh cho chế độ này)" : ""}</p>
+          </div>}
           {aiAudit.sections.map((section: AiAuditSection) => <section key={section.region} className="rounded-xl border border-slate-200 p-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <strong className="text-slate-900">{{header:"Phần đầu",metadata:"Thông tin văn bản",body:"Nội dung chính",footer:"Phần cuối",appendix:"Phụ lục",other:"Khối chưa phân loại"}[section.region]}</strong>
+                <strong className="text-slate-900">{{header:"Phần đầu",metadata:"Thông tin văn bản",body:"Nội dung chính",footer:"Phần cuối",appendix:"Phụ lục",other:"Khối chưa phân loại",source:"Đối chiếu file gốc"}[section.region]}</strong>
                 <p className="mt-0.5 text-[10px] text-slate-500">{section.reviewedChunks}/{section.totalChunks} lượt đã rà soát</p>
               </div>
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${section.status === "needs_review" ? "bg-amber-100 text-amber-800" : section.status === "not_evaluated" || section.status === "partially_evaluated" ? "bg-slate-100 text-slate-700" : section.status === "not_applicable" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-800"}`}>
@@ -2351,6 +2394,8 @@ export default function App() {
                 </div>
                 {(finding.fieldKey || finding.blockId) && <p className="mt-1 text-[10px] text-slate-500">Vị trí: {finding.fieldKey ? ({orgHeader1:"Cơ quan cấp trên",orgHeader2:"Cơ quan ban hành",nationalHeader1:"Quốc hiệu",nationalHeader2:"Tiêu ngữ",referenceNumber:"Số và ký hiệu",locationAndDate:"Địa danh, ngày tháng",documentType:"Loại văn bản",subject:"Trích yếu",addressee:"Kính gửi / Đối tượng nhận",bodyHtml:"Nội dung chính",signTitle:"Chức vụ người ký",signName:"Họ tên người ký",signatureBlocks:"Khối người ký",recipients:"Nơi nhận",signatureHtml:"Bảng ký nhiều người",appendices:"Phụ lục"} as Record<string,string>)[finding.fieldKey] || finding.fieldKey : `Khối nguồn ${finding.blockId}`}</p>}
                 <p className="mt-1 text-slate-700">{finding.observation}</p>
+                {finding.sourceQuote && <blockquote className="mt-2 border-l-2 border-violet-300 pl-2 text-slate-700"><strong>Trích từ file gốc:</strong> “{finding.sourceQuote}”</blockquote>}
+                {finding.ruleIds?.length ? <p className="mt-1 text-[10px] text-slate-600"><strong>Rule áp dụng:</strong> {finding.ruleIds.join(", ")}</p> : null}
                 <p className="mt-1 text-violet-900"><strong>Đề xuất:</strong> {finding.recommendation}</p>
               </div>)}
             </div>

@@ -17,7 +17,7 @@
     "pilot:generate": "tsx scripts/generate-pilot-documents.ts",
     "pilot:generate:adversarial": "tsx scripts/generate-pilot-adversarial-documents.ts",
     "test:import:segments": "tsx test/import-segments.test.ts",
-    "test:import:ai-audit": "tsx test/import-ai-audit.test.ts"
+    "test:import:ai-audit": "tsx test/import-ai-audit.test.ts && tsx test/original-source-ai-audit.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
