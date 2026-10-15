@@ -22,9 +22,10 @@ const zip = new JSZip();
 zip.file("word/document.xml", xml);
 const result = await extractBlocksFromDocx(await zip.generateAsync({ type: "nodebuffer" }));
 
-assert.deepEqual(result.blocks.map((block) => block.kind), ["paragraph", "table", "paragraph", "section-break"]);
+assert.deepEqual(result.blocks.map((block) => block.kind), ["paragraph", "table", "paragraph"],
+  "Terminal sectPr stores page settings and must not become visible document content");
 assert.equal(result.blocks[0].text, "Đoạn trước bảng");
 assert.deepEqual(result.blocks[1].tableShape, { rows: 2, columns: 2 });
 assert.deepEqual(result.blocks[1].tableData, [["Cơ quan", "Quốc hiệu"], ["Số 01", "Ngày 15"]]);
 assert.equal(result.blocks[2].text, "Đoạn sau bảng");
-console.log("[PASS] DOCX OOXML: paragraph, table and section order preserved with pPr/tblPr tags");
+console.log("[PASS] DOCX OOXML: paragraphs and table preserved; terminal section properties omitted from content");

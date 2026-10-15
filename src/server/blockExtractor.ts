@@ -255,15 +255,8 @@ export async function extractBlocksFromDocx(buffer: Uint8Array | ArrayBuffer): P
 
   for (const child of rawChildren) {
     if (child.tag === "w:sectPr") {
-      blocks.push({
-        id: `block-${blockIndex}`,
-        index: blockIndex,
-        kind: "section-break",
-        text: "",
-        html: "<hr class=\"section-break\"/>",
-        role: "unclassified",
-      });
-      blockIndex++;
+      // The body-level sectPr is page/section metadata, not a visible break.
+      // A real section break belongs to its paragraph's pPr, if present.
       continue;
     }
 
