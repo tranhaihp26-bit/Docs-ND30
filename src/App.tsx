@@ -441,6 +441,7 @@ export default function App() {
   const [aiAudit, setAiAudit] = useState<AiImportAudit | null>(null);
   const [aiAuditOpen, setAiAuditOpen] = useState(false);
   const [isAiReviewing, setIsAiReviewing] = useState(false);
+  const [aiAuditConsentPurpose, setAiAuditConsentPurpose] = useState<"review" | "auto" | null>(null);
   const [aiAutoReview, setAiAutoReview] = useState(false);
   const [parsedSourceRevision, setParsedSourceRevision] = useState(0);
   const [draftReady, setDraftReady] = useState(false);
@@ -816,10 +817,8 @@ export default function App() {
       return;
     }
     if (!autoConsent && !aiAutoReview) {
-      const confirmed = window.confirm(
-        "File DOCX/TXT gốc sẽ được gửi tạm tới máy chủ ứng dụng để trích văn bản độc lập. Văn bản trích xuất cùng toàn bộ trường/khối đã parse sẽ được gửi tới Google Gemini để đối chiếu. File gốc không được gửi dưới dạng DOCX nhị phân đến Gemini và không được lưu trên máy chủ; bố cục Word, ngắt trang, hình ảnh và vị trí trên trang sẽ được ghi là chưa đánh giá nếu không có bản render. Tài liệu có thể chứa dữ liệu cá nhân. AI chỉ báo cáo, không tự sửa. Bạn đồng ý gửi dữ liệu cho lượt rà soát này không?",
-      );
-      if (!confirmed) return;
+      setAiAuditConsentPurpose("review");
+      return;
     }
     const requestedRevision = auditRevisionRef.current;
     setIsAiReviewing(true);
@@ -869,6 +868,16 @@ export default function App() {
       setIsAiReviewing(false);
     }
   }
+
+  const confirmAiAuditConsent = () => {
+    const purpose = aiAuditConsentPurpose;
+    setAiAuditConsentPurpose(null);
+    if (purpose === "auto") {
+      setAiAutoReview(true);
+      return;
+    }
+    if (purpose === "review") void handleAiImportReview(true);
+  };
 
   useEffect(() => {
     if (aiAutoReview && parsedSourceRevision > 0 && parsedSourceRevision !== autoReviewedSourceRevisionRef.current && structuredImport && originalSourceFileRef.current) {
@@ -1727,10 +1736,7 @@ export default function App() {
                   <label className="mt-2 flex items-start gap-2 text-violet-950">
                     <input type="checkbox" checked={aiAutoReview} onChange={event => {
                       if (!event.target.checked) { setAiAutoReview(false); return; }
-                      const accepted = window.confirm(
-                        "Bật tự động rà soát trong phiên này? Sau mỗi lần parse, file gốc sẽ được gửi tạm tới máy chủ ứng dụng để trích văn bản; văn bản trích xuất và toàn bộ dữ liệu đã parse sẽ được gửi tới Google Gemini. File gốc không được lưu trên máy chủ hoặc gửi dưới dạng DOCX nhị phân tới Gemini. Không bật tùy chọn này khi tài liệu chứa thông tin bạn không được phép gửi ra dịch vụ AI.",
-                      );
-                      if (accepted) setAiAutoReview(true);
+                      setAiAuditConsentPurpose("auto");
                     }} className="mt-0.5 rounded border-violet-400" />
                     <span><strong>Tự động rà soát sau khi parse</strong> <span className="font-normal">(chỉ giữ trong phiên này)</span></span>
                   </label>
@@ -2496,6 +2502,47 @@ export default function App() {
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setPendingTemplate(null)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">Tiếp tục soạn bản hiện tại</button>
               <button type="button" onClick={() => applyTemplate(pendingTemplate)} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">Lưu phiên bản và đổi mẫu</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aiAuditConsentPurpose && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ai-audit-consent-title"
+          aria-describedby="ai-audit-consent-description"
+          onKeyDown={event => { if (event.key === "Escape") setAiAuditConsentPurpose(null); }}
+        >
+          <div className="w-full max-w-xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-violet-100 p-2 text-violet-700"><ShieldCheck className="h-5 w-5" /></div>
+              <div>
+                <h3 id="ai-audit-consent-title" className="text-sm font-bold text-slate-900">
+                  {aiAuditConsentPurpose === "auto" ? "Bật rà soát AI tự động sau khi parse?" : "Xác nhận gửi dữ liệu để AI rà soát"}
+                </h3>
+                <p id="ai-audit-consent-description" className="mt-2 text-xs leading-5 text-slate-700">
+                  {aiAuditConsentPurpose === "auto" ? "Sau mỗi lần parse trong phiên này, ứng dụng sẽ tự gửi dữ liệu theo mô tả dưới đây để rà soát." : "Để bắt đầu lượt rà soát này, ứng dụng sẽ xử lý dữ liệu như sau:"}
+                </p>
+              </div>
+            </div>
+            <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-slate-700">
+              <li>File DOCX/TXT gốc được gửi tạm tới máy chủ ứng dụng để trích văn bản độc lập; file gốc không được lưu trên máy chủ.</li>
+              <li>Văn bản trích xuất và các trường, khối, ô bảng, nội dung, phần cuối, phụ lục đã parse được gửi tới Google Gemini.</li>
+              <li>File DOCX nhị phân không được gửi tới Gemini. Bố cục Word, ngắt trang, hình ảnh và vị trí trên trang chưa được render sẽ không được AI xác nhận.</li>
+            </ul>
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+              Tài liệu có thể chứa dữ liệu cá nhân. Chỉ tiếp tục nếu bạn được phép gửi nội dung tới dịch vụ AI. AI chỉ lập báo cáo, không tự sửa bản soạn.
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
+              <button type="button" autoFocus onClick={() => setAiAuditConsentPurpose(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                Hủy
+              </button>
+              <button type="button" onClick={confirmAiAuditConsent} className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-800">
+                {aiAuditConsentPurpose === "auto" ? "Bật trong phiên này" : "Gửi và rà soát bằng AI"}
+              </button>
             </div>
           </div>
         </div>
