@@ -274,15 +274,17 @@ export function segmentSourceBlocks(
   }
 
   if (docTypeIndex === -1) {
-    // Fallback: detectDocumentType
+    // Infer only when the source actually mentions a document type.
     const fullText = blocks.slice(0, 10).map(b => b.text).join("\n");
-    const detected = detectDocumentType(fullText, options.standardType);
-    fields.documentType = {
-      value: detected,
-      confidence: "medium",
-      status: "extracted",
-      sourceBlockIds: [],
-    };
+    if (docTypeKeywords.some(keyword => fullText.toUpperCase().includes(keyword))) {
+      const detected = detectDocumentType(fullText, options.standardType);
+      fields.documentType = {
+        value: detected,
+        confidence: "medium",
+        status: "extracted",
+        sourceBlockIds: [],
+      };
+    }
   } else {
     nextStartIndex = Math.max(nextStartIndex, docTypeIndex + 1);
   }

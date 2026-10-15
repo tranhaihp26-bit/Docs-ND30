@@ -5,7 +5,6 @@
  */
 
 import JSZip from "jszip";
-import mammoth from "mammoth";
 import type { SourceBlock, SourceBlockKind } from "../shared/schemas/document.schema.ts";
 
 /**
@@ -241,7 +240,7 @@ export interface ExtractedBlocksResult {
 /**
  * Extracts SourceBlocks from DOCX buffer.
  */
-export async function extractBlocksFromDocx(buffer: Buffer): Promise<ExtractedBlocksResult> {
+export async function extractBlocksFromDocx(buffer: Uint8Array | ArrayBuffer): Promise<ExtractedBlocksResult> {
   const zip = await JSZip.loadAsync(buffer);
   const docXmlFile = zip.file("word/document.xml");
   if (!docXmlFile) {
@@ -303,23 +302,10 @@ export async function extractBlocksFromDocx(buffer: Buffer): Promise<ExtractedBl
     }
   }
 
-  // Also run mammoth to get complete backward-compatible text and HTML
-  let mammothText = "";
-  let mammothHtml = "";
-  try {
-    const rawResult = await mammoth.extractRawText({ buffer });
-    mammothText = rawResult.value;
-    const htmlResult = await mammoth.convertToHtml({ buffer });
-    mammothHtml = htmlResult.value;
-  } catch {
-    mammothText = blocks.map((b) => b.text).join("\n");
-    mammothHtml = blocks.map((b) => b.html || "").join("");
-  }
-
   return {
     blocks,
-    rawText: mammothText || blocks.map((b) => b.text).join("\n"),
-    rawHtml: mammothHtml || blocks.map((b) => b.html || "").join(""),
+    rawText: blocks.map((b) => b.text).join("\n"),
+    rawHtml: blocks.map((b) => b.html || "").join(""),
     fileType: "docx",
   };
 }

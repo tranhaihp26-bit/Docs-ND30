@@ -12,7 +12,7 @@ import DOMPurify from "dompurify";
 import ND30Editor from "./components/ND30Editor.tsx";
 import { A4DocumentPreview } from "./components/A4DocumentPreview.tsx";
 import { exportToDocx as generateAndDownloadDocx } from "./utils/docxExport.ts";
-import { parseImportResponse } from "./utils/importState.ts";
+import { parseLocalFile } from "./utils/localFileImport.ts";
 import { deriveImportStatus, updateImportField } from "./utils/importReview.ts";
 import { 
   type DocumentFormatType, 
@@ -465,9 +465,7 @@ export default function App() {
     applyTemplate(t);
   };
 
-  // Option B: File Upload handler (.docx, .txt)
-  // Transactional upload: validate response before any state change, use AbortController for race conditions
-  const uploadControllerRef = useRef<AbortController | null>(null);
+  // Option B: parse the selected file locally so import works in previews without an API route.
   const uploadRequestIdRef = useRef<number>(0);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -475,12 +473,6 @@ export default function App() {
     if (!file) return;
     const fileInput = e.currentTarget;
 
-    // Abort any in-flight request to prevent race conditions (A slow response overwriting B)
-    if (uploadControllerRef.current) {
-      uploadControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    uploadControllerRef.current = controller;
     const requestId = ++uploadRequestIdRef.current;
 
     setIsUploading(true);
@@ -488,32 +480,13 @@ export default function App() {
     setSuccessMsg("");
     // Do NOT set uploadedFileName yet - wait for valid response
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const res = await fetch("/api/parse-docx", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
+      const parsed = await parseLocalFile(file);
 
-      // Ignore response if a newer request has started
+      // Ignore a slower parse if a newer file was selected.
       if (requestId !== uploadRequestIdRef.current) {
         return;
       }
-
-      // CRITICAL: Re-check requestId immediately AFTER await res.json()
-      // A response can become stale during the await
-      const data = await res.json();
-
-      // SECOND CHECK: Another request may have started while awaiting res.json()
-      if (requestId !== uploadRequestIdRef.current) {
-        return;
-      }
-
-      // Validate response before ANY state change - throws on invalid/empty/error
-      const parsed = parseImportResponse(file.name, data);
 
       // ATOMIC STATE UPDATE: all import state changes happen together only after validation
       setRawText(parsed.text);
@@ -524,13 +497,9 @@ export default function App() {
       setUploadedFileType(parsed.fileType); // Set fileType from validated response
 
       const appCount = parsed.structured?.appendices?.length || 0;
-      const blockCount = data.blocks?.length || 0;
+      const blockCount = parsed.blockCount;
       setSuccessMsg(`Đã đọc thành công tệp "${parsed.filename}" (${parsed.text.length} ký tự, ${blockCount} khối, ${appCount} phụ lục). Bạn có thể kiểm tra phân vùng hoặc đưa trực tiếp vào Editor.`);
     } catch (err: any) {
-      // Ignore aborted requests
-      if (err.name === "AbortError" || err.name === "CancellationError") {
-        return;
-      }
       // Ignore stale responses
       if (requestId !== uploadRequestIdRef.current) {
         return;
@@ -542,7 +511,6 @@ export default function App() {
     } finally {
       if (requestId === uploadRequestIdRef.current) {
         setIsUploading(false);
-        uploadControllerRef.current = null;
         fileInput.value = "";
       }
     }
@@ -576,7 +544,7 @@ export default function App() {
 
     if (structuredImport) {
       const fields = structuredImport.fields;
-      const detectedType = fields.documentType?.value || detectDocumentType(rawText || uploadedHtml, standardType);
+      const detectedType = fields.documentType?.value || "";
 
       const newDoc: DocumentState = {
         headerProfile: "generic",
@@ -602,7 +570,7 @@ export default function App() {
       };
       setDoc(newDoc);
       pushVersion(`Nhập phân vùng từ tệp ${uploadedFileName || "văn bản"}`, newDoc);
-      setSuccessMsg(`Đã đưa tài liệu (${detectedType}) vào trình soạn thảo. ${newDoc.importMetadata?.status === "needs_review" ? "Còn phần chưa phân loại hoặc cần đối chiếu với bản gốc trước khi xuất." : "Đã xác nhận các phần trích xuất."}`);
+      setSuccessMsg(`Đã đưa tài liệu${detectedType ? ` (${detectedType})` : ""} vào trình soạn thảo. ${newDoc.importMetadata?.status === "needs_review" ? "Còn phần chưa phân loại hoặc cần đối chiếu với bản gốc trước khi xuất." : "Đã xác nhận các phần trích xuất."}`);
       setActiveTab("editor");
       return;
     }

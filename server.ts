@@ -182,6 +182,10 @@ async function startServer() {
       // Word .docx file parsed via Mammoth + JSZip structural block extraction
       try {
         const extracted = await extractBlocksFromDocx(req.file.buffer);
+        const [rawResult, htmlResult] = await Promise.all([
+          mammoth.extractRawText({ buffer: req.file.buffer }),
+          mammoth.convertToHtml({ buffer: req.file.buffer }),
+        ]);
         const structured = segmentSourceBlocks(extracted.blocks, {
           filename: req.file.originalname,
           fileType: "docx"
@@ -189,8 +193,8 @@ async function startServer() {
 
         return res.json({
           success: true,
-          text: extracted.rawText,
-          html: extracted.rawHtml,
+          text: rawResult.value || extracted.rawText,
+          html: htmlResult.value || extracted.rawHtml,
           fileType: "docx",
           blocks: extracted.blocks,
           structured,
